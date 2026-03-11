@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "118302946040",
+    "project_id": "dfw-flight-companion",
+    "storage_bucket": "dfw-flight-companion.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:118302946040:android:3dc58969095ec9d673010d",
+        "android_client_info": {
+          "package_name": "com.example.dfwflightcompanion"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbqdTQLNCqwLq_hyJ7snXh0M4PdhfrJoE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

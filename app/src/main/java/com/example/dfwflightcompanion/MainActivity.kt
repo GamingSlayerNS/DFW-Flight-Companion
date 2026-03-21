@@ -51,13 +51,15 @@ class MainActivity : ComponentActivity() {
                         }
                 }
 
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                /**Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Greeting(
                         name = terminalName,
                         desc = terminalDesc,
                         modifier = Modifier.padding(innerPadding)
                     )
-                }
+                }*/
+
+                BottomNavigationBar()
             }
         }
     }
@@ -77,5 +79,13 @@ fun Greeting(name: String, desc: String, modifier: Modifier = Modifier) {
 fun GreetingPreview() {
     DFWFlightCompanionTheme {
         Greeting("Sample Terminal", "Sample Description")
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun NavigationBarPreview(){
+    DFWFlightCompanionTheme {
+        BottomNavigationBar()
     }
 }

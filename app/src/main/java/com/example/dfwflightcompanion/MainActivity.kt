@@ -30,19 +30,28 @@ class MainActivity : ComponentActivity() {
                 var terminalName by remember { mutableStateOf("Loading...") }
                 var terminalDesc by remember { mutableStateOf("Loading...") }
 
+                // SET TO TRUE TO POPULATE DATABASE, THEN SET FALSE TO SAVE COSTS
+                val shouldInitializeDb = true
 
                 LaunchedEffect(Unit) {
                     val db = FirebaseFirestore.getInstance()
+
+                    if (shouldInitializeDb) {
+                        Log.d("FirestoreTest", "Initializing database...")
+                        initializeFirestore()
+                    }
+
+                    // Fetch data from Terminal collection
                     db.collection("Terminal")
                         .get()
                         .addOnSuccessListener { result ->
                             if (!result.isEmpty) {
-                                // Getting the first document for testing
                                 val document = result.documents[0]
-                                terminalName = document.getString("name") ?: "No name field"
-                                terminalDesc = document.getString("desc") ?: "No desc field"
+                                terminalName = document.getString("Name") ?: "No Name field"
+                                terminalDesc = document.getString("Description") ?: "No Description field"
                             } else {
                                 terminalName = "No documents found"
+                                terminalDesc = ""
                             }
                         }
                         .addOnFailureListener { exception ->
@@ -60,6 +69,100 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Seeds the Firestore database with sample data.
+     * WARNING: Running this frequently will increase your Firestore write costs.
+     */
+    private fun initializeFirestore() {
+        val db = FirebaseFirestore.getInstance()
+
+        // Terminal
+        val terminal = hashMapOf(
+            "ID" to "T1",
+            "Name" to "Terminal D",
+            "Description" to "DFW International Terminal"
+        )
+        db.collection("Terminal").document("sampleTerminal").set(terminal)
+
+        // MapNode
+        val mapNode = hashMapOf(
+            "NodeID" to "N1",
+            "TerminalID" to "T1",
+            "XCoordinate" to 0,
+            "YCoordinate" to 0,
+            "FloorLevel" to 3,
+            "NodeType" to "Floor"
+        )
+        db.collection("MapNode").document("sampleNode").set(mapNode)
+
+        // PathEdge
+        val pathEdge = hashMapOf(
+            "EdgeID" to "E1",
+            "StartNode" to "N1",
+            "EndNode" to "N2",
+            "Distance" to 10,
+            "IsOpen" to true
+        )
+        db.collection("PathEdge").document("sampleEdge").set(pathEdge)
+
+        // Amenity
+        val amenity = hashMapOf(
+            "AmenityID" to "A1",
+            "Name" to "Restroom",
+            "NodeID" to "N1",
+            "AmenityType" to "Restroom",
+            "IsAccessible" to true
+        )
+        db.collection("Amenity").document("sampleAmenity").set(amenity)
+
+        // AmenityUnit
+        val amenityUnit = hashMapOf(
+            "StatusID" to "S1",
+            "AmenityID" to "A1",
+            "SensorID" to "SN1",
+            "Congestion" to "Low",
+            "UnitStatus" to "Open",
+            "LastUpdated" to System.currentTimeMillis()
+        )
+        db.collection("AmenityUnit").document("sampleUnit").set(amenityUnit)
+
+        // AmenitySchedule
+        val amenitySchedule = hashMapOf(
+            "AmenityScheduleID" to "AS1",
+            "AmenityID" to "A1",
+            "OperatingHours" to "24/7"
+        )
+        db.collection("AmenitySchedule").document("sampleSchedule").set(amenitySchedule)
+
+        // Sensor
+        val sensor = hashMapOf(
+            "SensorID" to "SN1",
+            "SensorType" to "Occupancy",
+            "Status" to "Active",
+            "LastUpdate" to System.currentTimeMillis()
+        )
+        db.collection("Sensor").document("sampleSensor").set(sensor)
+
+        // User
+        val user = hashMapOf(
+            "UserID" to "U1",
+            "Email" to "example@email.com",
+            "Username" to "testUser",
+            "CreatedAt" to System.currentTimeMillis()
+        )
+        db.collection("User").document("sampleUser").set(user)
+
+        // UserReports
+        val report = hashMapOf(
+            "ReportID" to "R1",
+            "UserID" to "U1",
+            "NodeID" to "N1",
+            "Description" to "Broken restroom",
+            "ReportType" to "Maintenance"
+        )
+        db.collection("UserReports").document("sampleReport").set(report)
     }
 }
 

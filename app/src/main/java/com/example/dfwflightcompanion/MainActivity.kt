@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
                 var terminalDesc by remember { mutableStateOf("Loading...") }
 
                 // SET TO TRUE TO POPULATE DATABASE, THEN SET FALSE TO SAVE COSTS
-                val shouldInitializeDb = true
+                val shouldInitializeDb = false
 
                 LaunchedEffect(Unit) {
                     val db = FirebaseFirestore.getInstance()

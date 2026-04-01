@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
                 var statusMessage by remember { mutableStateOf("Ready") }
 
                 // SET TO TRUE TO WIPE AND RE-POPULATE FROM GEOJSON, THEN SET FALSE
-                val shouldInitializeDb = true
+                val shouldInitializeDb = false
 
                 LaunchedEffect(Unit) {
                     val db = FirebaseFirestore.getInstance()

@@ -5,13 +5,12 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import com.example.dfwflightcompanion.ui.theme.DFWFlightCompanionTheme
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.GeoPoint
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,28 +21,18 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             DFWFlightCompanionTheme {
-                var terminalName by remember { mutableStateOf("Loading...") }
-                var terminalDesc by remember { mutableStateOf("Loading...") }
+                var statusMessage by remember { mutableStateOf("Ready") }
 
-                // SET TO TRUE TO WIPE AND RE-POPULATE, THEN SET FALSE TO SAVE COSTS
+                // SET TO TRUE TO WIPE AND RE-POPULATE FROM GEOJSON, THEN SET FALSE
                 val shouldInitializeDb = true 
 
                 LaunchedEffect(Unit) {
-                    Log.d("FirestoreTest", "LaunchedEffect triggered")
                     val db = FirebaseFirestore.getInstance()
 
                     if (shouldInitializeDb) {
-                        Log.d("FirestoreTest", "Wiping and Initializing database...")
+                        statusMessage = "Wiping and Initializing from GeoJSON..."
                         wipeAndSeedFirestore(db) {
-                            fetchTerminalData(db) { name, desc ->
-                                terminalName = name
-                                terminalDesc = desc
-                            }
-                        }
-                    } else {
-                        fetchTerminalData(db) { name, desc ->
-                            terminalName = name
-                            terminalDesc = desc
+                            statusMessage = "Database Population Complete!"
                         }
                     }
                 }
@@ -53,175 +42,113 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun fetchTerminalData(db: FirebaseFirestore, onResult: (String, String) -> Unit) {
-        db.collection("Terminal")
-            .get()
-            .addOnSuccessListener { result ->
-                if (!result.isEmpty) {
-                    val document = result.documents[0]
-                    val name = document.getString("Name") ?: "No Name field"
-                    val desc = document.getString("Description") ?: "No Description field"
-                    onResult(name, desc)
-                    Log.d("FirestoreTest", "Data fetched: $name")
-                } else {
-                    onResult("No documents found", "")
-                    Log.d("FirestoreTest", "No documents found in Terminal")
-                }
-            }
-            .addOnFailureListener { exception ->
-                Log.e("FirestoreTest", "Error getting documents: ", exception)
-                onResult("Error", exception.message ?: "Unknown error")
-            }
-    }
-
-    /**
-     * Wipes specific collections and then seeds them with fresh data.
-     */
     private fun wipeAndSeedFirestore(db: FirebaseFirestore, onComplete: () -> Unit) {
         val collections = listOf(
             "Terminal", "MapNode", "PathEdge", "Amenity", 
-            "AmenityUnit", "AmenitySchedule", "Sensor", "User", "UserReports"
+            "AmenityUnit", "AmenitySchedule", "Sensor", "User", "UserReports", "MapFeature"
         )
 
         var collectionsProcessed = 0
-
         collections.forEach { collectionName ->
             db.collection(collectionName).get().addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     val batch = db.batch()
-                    task.result?.forEach { document ->
-                        batch.delete(document.reference)
-                    }
+                    task.result?.forEach { document -> batch.delete(document.reference) }
                     batch.commit().addOnCompleteListener {
                         collectionsProcessed++
                         if (collectionsProcessed == collections.size) {
-                            seedData(db, onComplete)
+                            seedFromGeoJson(db, onComplete)
                         }
                     }
                 } else {
                     collectionsProcessed++
                     if (collectionsProcessed == collections.size) {
-                        seedData(db, onComplete)
+                        seedFromGeoJson(db, onComplete)
                     }
                 }
             }
         }
     }
 
-    private fun seedData(db: FirebaseFirestore, onComplete: () -> Unit) {
-        Log.d("FirestoreTest", "Writing fresh documents with auto-generated IDs...")
-        
-        var addsDone = 0
-        val totalToSeed = 9
-        
-        fun checkDone() {
-            addsDone++
-            if (addsDone == totalToSeed) {
-                Log.d("FirestoreTest", "Seeding complete!")
-                onComplete()
+    private fun seedFromGeoJson(db: FirebaseFirestore, onComplete: () -> Unit) {
+        try {
+            Log.d("FirestoreTest", "Starting GeoJSON Seed...")
+            
+            // 1. Seed Terminal Root
+            db.collection("Terminal").add(hashMapOf(
+                "Name" to "Terminal D",
+                "Description" to "DFW International Terminal",
+                "Center" to GeoPoint(32.8974, -97.0446)
+            ))
+
+            // 2. Parse routing.geojson for Nodes and Edges
+            val routingJson = assets.open("routing.geojson").bufferedReader().use { it.readText() }
+            val routingObj = JSONObject(routingJson)
+            val routingFeatures = routingObj.getJSONArray("features")
+
+            for (i in 0 until routingFeatures.length()) {
+                val feature = routingFeatures.getJSONObject(i)
+                val props = feature.getJSONObject("properties")
+                val geom = feature.getJSONObject("geometry")
+                val type = props.optString("type")
+
+                if (type == "poi") {
+                    val coords = geom.getJSONArray("coordinates")
+                    db.collection("MapNode").add(hashMapOf(
+                        "NodeID" to props.optString("node_id"),
+                        "Name" to props.optString("name"),
+                        "Location" to GeoPoint(coords.getDouble(1), coords.getDouble(0)),
+                        "Type" to "poi",
+                        "FloorLevel" to 3
+                    ))
+                } else if (type == "path") {
+                    val coordsArray = geom.getJSONArray("coordinates")
+                    val pathPoints = mutableListOf<GeoPoint>()
+                    for (j in 0 until coordsArray.length()) {
+                        val pt = coordsArray.getJSONArray(j)
+                        pathPoints.add(GeoPoint(pt.getDouble(1), pt.getDouble(0)))
+                    }
+                    db.collection("PathEdge").add(hashMapOf(
+                        "Name" to props.optString("name"),
+                        "PathPoints" to pathPoints,
+                        "IsOpen" to true
+                    ))
+                }
             }
+
+            // 3. Parse floorplan.geojson for MapFeatures (Polygons)
+            val floorplanJson = assets.open("floorplan.geojson").bufferedReader().use { it.readText() }
+            val floorplanObj = JSONObject(floorplanJson)
+            val floorplanFeatures = floorplanObj.getJSONArray("features")
+
+            for (i in 0 until floorplanFeatures.length()) {
+                val feature = floorplanFeatures.getJSONObject(i)
+                val props = feature.getJSONObject("properties")
+                val geom = feature.getJSONObject("geometry")
+                
+                if (geom.getString("type") == "Polygon") {
+                    val rings = geom.getJSONArray("coordinates")
+                    val exteriorRing = rings.getJSONArray(0)
+                    val points = mutableListOf<GeoPoint>()
+                    for (j in 0 until exteriorRing.length()) {
+                        val pt = exteriorRing.getJSONArray(j)
+                        points.add(GeoPoint(pt.getDouble(1), pt.getDouble(0)))
+                    }
+                    
+                    db.collection("MapFeature").add(hashMapOf(
+                        "Name" to props.optString("name"),
+                        "FeatureType" to props.optString("type"),
+                        "Geometry" to points,
+                        "FloorLevel" to 3
+                    ))
+                }
+            }
+
+            Log.d("FirestoreTest", "GeoJSON Seeding Complete!")
+            onComplete()
+
+        } catch (e: Exception) {
+            Log.e("FirestoreTest", "GeoJSON Seed Failed", e)
         }
-
-        // Terminal
-        db.collection("Terminal").add(hashMapOf(
-            "ID" to "T1",
-            "Name" to "Terminal D",
-            "Description" to "DFW International Terminal"
-        )).addOnCompleteListener { checkDone() }
-
-        // MapNode
-        db.collection("MapNode").add(hashMapOf(
-            "NodeID" to "N1",
-            "TerminalID" to "T1",
-            "XCoordinate" to 0,
-            "YCoordinate" to 0,
-            "FloorLevel" to 3,
-            "NodeType" to "Floor"
-        )).addOnCompleteListener { checkDone() }
-        
-        // PathEdge
-        db.collection("PathEdge").add(hashMapOf(
-            "EdgeID" to "E1",
-            "StartNode" to "N1",
-            "EndNode" to "N2",
-            "Distance" to 10,
-            "IsOpen" to true
-        )).addOnCompleteListener { checkDone() }
-
-        // Amenity
-        db.collection("Amenity").add(hashMapOf(
-            "AmenityID" to "A1",
-            "Name" to "Restroom",
-            "NodeID" to "N1",
-            "AmenityType" to "Restroom",
-            "IsAccessible" to true
-        )).addOnCompleteListener { checkDone() }
-
-        // AmenityUnit
-        db.collection("AmenityUnit").add(hashMapOf(
-            "StatusID" to "S1",
-            "AmenityID" to "A1",
-            "SensorID" to "SN1",
-            "Congestion" to "Low",
-            "UnitStatus" to "Open",
-            "LastUpdated" to System.currentTimeMillis()
-        )).addOnCompleteListener { checkDone() }
-
-        // AmenitySchedule
-        db.collection("AmenitySchedule").add(hashMapOf(
-            "AmenityScheduleID" to "AS1",
-            "AmenityID" to "A1",
-            "OperatingHours" to "24/7"
-        )).addOnCompleteListener { checkDone() }
-
-        // Sensor
-        db.collection("Sensor").add(hashMapOf(
-            "SensorID" to "SN1",
-            "SensorType" to "Occupancy",
-            "Status" to "Active",
-            "LastUpdate" to System.currentTimeMillis()
-        )).addOnCompleteListener { checkDone() }
-
-        // User
-        db.collection("User").add(hashMapOf(
-            "UserID" to "U1",
-            "Email" to "example@email.com",
-            "Username" to "testUser",
-            "CreatedAt" to System.currentTimeMillis()
-        )).addOnCompleteListener { checkDone() }
-
-        // UserReports
-        db.collection("UserReports").add(hashMapOf(
-            "ReportID" to "R1",
-            "UserID" to "U1",
-            "NodeID" to "N1",
-            "Description" to "Broken restroom",
-            "ReportType" to "Maintenance"
-        )).addOnCompleteListener { checkDone() }
-    }
-}
-
-@Composable
-fun Greeting(name: String, desc: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(text = "Firestore Test:")
-        Text(text = "Terminal Name: $name")
-        Text(text = "Description: $desc")
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    DFWFlightCompanionTheme {
-        Greeting("Sample Terminal", "Sample Description")
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun NavigationBarPreview(){
-    DFWFlightCompanionTheme {
-        BottomNavigationBar()
     }
 }

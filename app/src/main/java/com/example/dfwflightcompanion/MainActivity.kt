@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.add
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.dfwflightcompanion.ui.theme.DFWFlightCompanionTheme
+import androidx.compose.ui.geometry.isEmpty
 import com.google.firebase.firestore.FirebaseFirestore
 
 class MainActivity : ComponentActivity() {
@@ -41,14 +43,16 @@ class MainActivity : ComponentActivity() {
                         initializeFirestore()
                     }
 
-                    // Fetch data from Terminal collection
+                    // Fetch data from Terminal collection to verify
                     db.collection("Terminal")
                         .get()
                         .addOnSuccessListener { result ->
                             if (!result.isEmpty) {
+                                // Grab the first one found
                                 val document = result.documents[0]
                                 terminalName = document.getString("Name") ?: "No Name field"
-                                terminalDesc = document.getString("Description") ?: "No Description field"
+                                terminalDesc =
+                                    document.getString("Description") ?: "No Description field"
                             } else {
                                 terminalName = "No documents found"
                                 terminalDesc = ""
@@ -60,22 +64,13 @@ class MainActivity : ComponentActivity() {
                         }
                 }
 
-                /**Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = terminalName,
-                        desc = terminalDesc,
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }*/
-
                 BottomNavigationBar()
             }
         }
     }
 
     /**
-     * Seeds the Firestore database with sample data.
-     * WARNING: Running this frequently will increase your Firestore write costs.
+     * Seeds the Firestore database with sample data using Auto-Generated IDs.
      */
     private fun initializeFirestore() {
         val db = FirebaseFirestore.getInstance()
@@ -86,7 +81,7 @@ class MainActivity : ComponentActivity() {
             "Name" to "Terminal D",
             "Description" to "DFW International Terminal"
         )
-        db.collection("Terminal").document("sampleTerminal").set(terminal)
+        db.collection("Terminal").add(terminal)
 
         // MapNode
         val mapNode = hashMapOf(
@@ -97,7 +92,7 @@ class MainActivity : ComponentActivity() {
             "FloorLevel" to 3,
             "NodeType" to "Floor"
         )
-        db.collection("MapNode").document("sampleNode").set(mapNode)
+        db.collection("MapNode").add(mapNode)
 
         // PathEdge
         val pathEdge = hashMapOf(
@@ -107,7 +102,7 @@ class MainActivity : ComponentActivity() {
             "Distance" to 10,
             "IsOpen" to true
         )
-        db.collection("PathEdge").document("sampleEdge").set(pathEdge)
+        db.collection("PathEdge").add(pathEdge)
 
         // Amenity
         val amenity = hashMapOf(
@@ -117,7 +112,7 @@ class MainActivity : ComponentActivity() {
             "AmenityType" to "Restroom",
             "IsAccessible" to true
         )
-        db.collection("Amenity").document("sampleAmenity").set(amenity)
+        db.collection("Amenity").add(amenity)
 
         // AmenityUnit
         val amenityUnit = hashMapOf(
@@ -128,7 +123,7 @@ class MainActivity : ComponentActivity() {
             "UnitStatus" to "Open",
             "LastUpdated" to System.currentTimeMillis()
         )
-        db.collection("AmenityUnit").document("sampleUnit").set(amenityUnit)
+        db.collection("AmenityUnit").add(amenityUnit)
 
         // AmenitySchedule
         val amenitySchedule = hashMapOf(
@@ -136,7 +131,7 @@ class MainActivity : ComponentActivity() {
             "AmenityID" to "A1",
             "OperatingHours" to "24/7"
         )
-        db.collection("AmenitySchedule").document("sampleSchedule").set(amenitySchedule)
+        db.collection("AmenitySchedule").add(amenitySchedule)
 
         // Sensor
         val sensor = hashMapOf(
@@ -145,7 +140,7 @@ class MainActivity : ComponentActivity() {
             "Status" to "Active",
             "LastUpdate" to System.currentTimeMillis()
         )
-        db.collection("Sensor").document("sampleSensor").set(sensor)
+        db.collection("Sensor").add(sensor)
 
         // User
         val user = hashMapOf(
@@ -154,7 +149,7 @@ class MainActivity : ComponentActivity() {
             "Username" to "testUser",
             "CreatedAt" to System.currentTimeMillis()
         )
-        db.collection("User").document("sampleUser").set(user)
+        db.collection("User").add(user)
 
         // UserReports
         val report = hashMapOf(
@@ -164,9 +159,10 @@ class MainActivity : ComponentActivity() {
             "Description" to "Broken restroom",
             "ReportType" to "Maintenance"
         )
-        db.collection("UserReports").document("sampleReport").set(report)
+        db.collection("UserReports").add(report)
     }
 }
+
 
 @Composable
 fun Greeting(name: String, desc: String, modifier: Modifier = Modifier) {

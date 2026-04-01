@@ -150,6 +150,58 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            //4. Add remaining Collections
+            // Amenity
+            db.collection("Amenity").add(hashMapOf(
+                "AmenityID" to "A1",
+                "Name" to "Restroom",
+                "NodeID" to "N1",
+                "AmenityType" to "Restroom",
+                "IsAccessible" to true
+            ))
+
+            // AmenityUnit
+            db.collection("AmenityUnit").add(hashMapOf(
+                "StatusID" to "S1",
+                "AmenityID" to "A1",
+                "SensorID" to "SN1",
+                "Congestion" to "Low",
+                "UnitStatus" to "Open",
+                "LastUpdated" to System.currentTimeMillis()
+            ))
+
+            // AmenitySchedule
+            db.collection("AmenitySchedule").add(hashMapOf(
+                "AmenityScheduleID" to "AS1",
+                "AmenityID" to "A1",
+                "OperatingHours" to "24/7"
+            ))
+
+            // Sensor
+            db.collection("Sensor").add(hashMapOf(
+                "SensorID" to "SN1",
+                "SensorType" to "Occupancy",
+                "Status" to "Active",
+                "LastUpdate" to System.currentTimeMillis()
+            ))
+
+            // User
+            db.collection("User").add(hashMapOf(
+                "UserID" to "U1",
+                "Email" to "example@email.com",
+                "Username" to "testUser",
+                "CreatedAt" to System.currentTimeMillis()
+            ))
+
+            // UserReports
+            db.collection("UserReports").add(hashMapOf(
+                "ReportID" to "R1",
+                "UserID" to "U1",
+                "NodeID" to "N1",
+                "Description" to "Broken restroom",
+                "ReportType" to "Maintenance"
+            ))
+
             Log.d("FirestoreTest", "GeoJSON Seeding Complete!")
             onComplete()
 

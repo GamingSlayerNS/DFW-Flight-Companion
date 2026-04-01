@@ -6,62 +6,46 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.foundation.layout.add
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.dfwflightcompanion.ui.theme.DFWFlightCompanionTheme
-import androidx.compose.ui.geometry.isEmpty
 import com.google.firebase.firestore.FirebaseFirestore
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        Log.d("FirestoreTest", "MainActivity onCreate started")
+        
         enableEdgeToEdge()
         setContent {
             DFWFlightCompanionTheme {
                 var terminalName by remember { mutableStateOf("Loading...") }
                 var terminalDesc by remember { mutableStateOf("Loading...") }
 
-                // SET TO TRUE TO POPULATE DATABASE, THEN SET FALSE TO SAVE COSTS
-                val shouldInitializeDb = false
+                // SET TO TRUE TO WIPE AND RE-POPULATE, THEN SET FALSE TO SAVE COSTS
+                val shouldInitializeDb = true 
 
                 LaunchedEffect(Unit) {
+                    Log.d("FirestoreTest", "LaunchedEffect triggered")
                     val db = FirebaseFirestore.getInstance()
 
                     if (shouldInitializeDb) {
-                        Log.d("FirestoreTest", "Initializing database...")
-                        initializeFirestore()
-                    }
-
-                    // Fetch data from Terminal collection to verify
-                    db.collection("Terminal")
-                        .get()
-                        .addOnSuccessListener { result ->
-                            if (!result.isEmpty) {
-                                // Grab the first one found
-                                val document = result.documents[0]
-                                terminalName = document.getString("Name") ?: "No Name field"
-                                terminalDesc =
-                                    document.getString("Description") ?: "No Description field"
-                            } else {
-                                terminalName = "No documents found"
-                                terminalDesc = ""
+                        Log.d("FirestoreTest", "Wiping and Initializing database...")
+                        wipeAndSeedFirestore(db) {
+                            fetchTerminalData(db) { name, desc ->
+                                terminalName = name
+                                terminalDesc = desc
                             }
                         }
-                        .addOnFailureListener { exception ->
-                            Log.e("FirestoreTest", "Error getting documents: ", exception)
-                            terminalName = "Error: ${exception.message}"
+                    } else {
+                        fetchTerminalData(db) { name, desc ->
+                            terminalName = name
+                            terminalDesc = desc
                         }
+                    }
                 }
 
                 BottomNavigationBar()
@@ -69,100 +53,153 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun fetchTerminalData(db: FirebaseFirestore, onResult: (String, String) -> Unit) {
+        db.collection("Terminal")
+            .get()
+            .addOnSuccessListener { result ->
+                if (!result.isEmpty) {
+                    val document = result.documents[0]
+                    val name = document.getString("Name") ?: "No Name field"
+                    val desc = document.getString("Description") ?: "No Description field"
+                    onResult(name, desc)
+                    Log.d("FirestoreTest", "Data fetched: $name")
+                } else {
+                    onResult("No documents found", "")
+                    Log.d("FirestoreTest", "No documents found in Terminal")
+                }
+            }
+            .addOnFailureListener { exception ->
+                Log.e("FirestoreTest", "Error getting documents: ", exception)
+                onResult("Error", exception.message ?: "Unknown error")
+            }
+    }
+
     /**
-     * Seeds the Firestore database with sample data using Auto-Generated IDs.
+     * Wipes specific collections and then seeds them with fresh data.
      */
-    private fun initializeFirestore() {
-        val db = FirebaseFirestore.getInstance()
+    private fun wipeAndSeedFirestore(db: FirebaseFirestore, onComplete: () -> Unit) {
+        val collections = listOf(
+            "Terminal", "MapNode", "PathEdge", "Amenity", 
+            "AmenityUnit", "AmenitySchedule", "Sensor", "User", "UserReports"
+        )
+
+        var collectionsProcessed = 0
+
+        collections.forEach { collectionName ->
+            db.collection(collectionName).get().addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val batch = db.batch()
+                    task.result?.forEach { document ->
+                        batch.delete(document.reference)
+                    }
+                    batch.commit().addOnCompleteListener {
+                        collectionsProcessed++
+                        if (collectionsProcessed == collections.size) {
+                            seedData(db, onComplete)
+                        }
+                    }
+                } else {
+                    collectionsProcessed++
+                    if (collectionsProcessed == collections.size) {
+                        seedData(db, onComplete)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun seedData(db: FirebaseFirestore, onComplete: () -> Unit) {
+        Log.d("FirestoreTest", "Writing fresh documents with auto-generated IDs...")
+        
+        var addsDone = 0
+        val totalToSeed = 9
+        
+        fun checkDone() {
+            addsDone++
+            if (addsDone == totalToSeed) {
+                Log.d("FirestoreTest", "Seeding complete!")
+                onComplete()
+            }
+        }
 
         // Terminal
-        val terminal = hashMapOf(
+        db.collection("Terminal").add(hashMapOf(
             "ID" to "T1",
             "Name" to "Terminal D",
             "Description" to "DFW International Terminal"
-        )
-        db.collection("Terminal").add(terminal)
+        )).addOnCompleteListener { checkDone() }
 
         // MapNode
-        val mapNode = hashMapOf(
+        db.collection("MapNode").add(hashMapOf(
             "NodeID" to "N1",
             "TerminalID" to "T1",
             "XCoordinate" to 0,
             "YCoordinate" to 0,
             "FloorLevel" to 3,
             "NodeType" to "Floor"
-        )
-        db.collection("MapNode").add(mapNode)
-
+        )).addOnCompleteListener { checkDone() }
+        
         // PathEdge
-        val pathEdge = hashMapOf(
+        db.collection("PathEdge").add(hashMapOf(
             "EdgeID" to "E1",
             "StartNode" to "N1",
             "EndNode" to "N2",
             "Distance" to 10,
             "IsOpen" to true
-        )
-        db.collection("PathEdge").add(pathEdge)
+        )).addOnCompleteListener { checkDone() }
 
         // Amenity
-        val amenity = hashMapOf(
+        db.collection("Amenity").add(hashMapOf(
             "AmenityID" to "A1",
             "Name" to "Restroom",
             "NodeID" to "N1",
             "AmenityType" to "Restroom",
             "IsAccessible" to true
-        )
-        db.collection("Amenity").add(amenity)
+        )).addOnCompleteListener { checkDone() }
 
         // AmenityUnit
-        val amenityUnit = hashMapOf(
+        db.collection("AmenityUnit").add(hashMapOf(
             "StatusID" to "S1",
             "AmenityID" to "A1",
             "SensorID" to "SN1",
             "Congestion" to "Low",
             "UnitStatus" to "Open",
             "LastUpdated" to System.currentTimeMillis()
-        )
-        db.collection("AmenityUnit").add(amenityUnit)
+        )).addOnCompleteListener { checkDone() }
 
         // AmenitySchedule
-        val amenitySchedule = hashMapOf(
+        db.collection("AmenitySchedule").add(hashMapOf(
             "AmenityScheduleID" to "AS1",
             "AmenityID" to "A1",
             "OperatingHours" to "24/7"
-        )
-        db.collection("AmenitySchedule").add(amenitySchedule)
+        )).addOnCompleteListener { checkDone() }
 
         // Sensor
-        val sensor = hashMapOf(
+        db.collection("Sensor").add(hashMapOf(
             "SensorID" to "SN1",
             "SensorType" to "Occupancy",
             "Status" to "Active",
             "LastUpdate" to System.currentTimeMillis()
-        )
-        db.collection("Sensor").add(sensor)
+        )).addOnCompleteListener { checkDone() }
 
         // User
-        val user = hashMapOf(
+        db.collection("User").add(hashMapOf(
             "UserID" to "U1",
             "Email" to "example@email.com",
             "Username" to "testUser",
             "CreatedAt" to System.currentTimeMillis()
-        )
-        db.collection("User").add(user)
+        )).addOnCompleteListener { checkDone() }
 
         // UserReports
-        val report = hashMapOf(
+        db.collection("UserReports").add(hashMapOf(
             "ReportID" to "R1",
             "UserID" to "U1",
             "NodeID" to "N1",
             "Description" to "Broken restroom",
             "ReportType" to "Maintenance"
-        )
-        db.collection("UserReports").add(report)
+        )).addOnCompleteListener { checkDone() }
     }
 }
-
 
 @Composable
 fun Greeting(name: String, desc: String, modifier: Modifier = Modifier) {

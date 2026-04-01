@@ -5,91 +5,105 @@
       "type": "Feature",
       "properties": {
         "type": "poi",
+        "id": "poi_entrance",
         "name": "Main Entrance",
-        "node_id": "poi_entrance"
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "Point",
-        "coordinates": [-97.0446, 32.89935]
+        "coordinates": [-97.0446, 32.89935, 1]
       }
     },
     {
       "type": "Feature",
       "properties": {
         "type": "poi",
+        "id": "poi_exit",
         "name": "Main Exit",
-        "node_id": "poi_exit"
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "Point",
-        "coordinates": [-97.0446, 32.8957]
+        "coordinates": [-97.0446, 32.8957, 1]
       }
     },
     {
       "type": "Feature",
       "properties": {
         "type": "poi",
+        "id": "poi_rr_nw",
         "name": "Restroom NW",
-        "node_id": "poi_rr_nw"
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "Point",
-        "coordinates": [-97.0449, 32.89875]
+        "coordinates": [-97.0449, 32.89875, 1]
       }
     },
     {
       "type": "Feature",
       "properties": {
         "type": "poi",
+        "id": "poi_rr_sw",
         "name": "Restroom SW",
-        "node_id": "poi_rr_sw"
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "Point",
-        "coordinates": [-97.0449, 32.89625]
+        "coordinates": [-97.0449, 32.89625, 1]
       }
     },
     {
       "type": "Feature",
       "properties": {
         "type": "poi",
+        "id": "poi_rr_ne",
         "name": "Restroom NE",
-        "node_id": "poi_rr_ne"
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "Point",
-        "coordinates": [-97.0443, 32.89625]
+        "coordinates": [-97.0443, 32.89625, 1]
       }
     },
     {
       "type": "Feature",
       "properties": {
         "type": "poi",
+        "id": "poi_rr_se",
         "name": "Restroom SE",
-        "node_id": "poi_rr_se"
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "Point",
-        "coordinates": [-97.0443, 32.89725]
+        "coordinates": [-97.0443, 32.89725, 1]
       }
     },
     {
       "type": "Feature",
       "properties": {
         "type": "path",
+        "id": "path_main_corridor_spine",
         "name": "Main Corridor Spine",
-        "description": "The central walkable path down the main hallway"
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [-97.0446, 32.89935],
-          [-97.0446, 32.8992],
-          [-97.0446, 32.89875],
-          [-97.0446, 32.89725],
-          [-97.0446, 32.89625],
-          [-97.0446, 32.8958],
-          [-97.0446, 32.8957]
+          [-97.0446, 32.89935, 1],
+          [-97.0446, 32.8992, 1],
+          [-97.0446, 32.89875, 1],
+          [-97.0446, 32.89725, 1],
+          [-97.0446, 32.89625, 1],
+          [-97.0446, 32.8958, 1],
+          [-97.0446, 32.8957, 1]
         ]
       }
     },
@@ -97,13 +111,16 @@
       "type": "Feature",
       "properties": {
         "type": "path",
-        "name": "Branch to Restroom NW"
+        "id": "path_branch_restroom_nw",
+        "name": "Branch to Restroom NW",
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [-97.0446, 32.89875],
-          [-97.0449, 32.89875]
+          [-97.0446, 32.89875, 1],
+          [-97.0449, 32.89875, 1]
         ]
       }
     },
@@ -111,13 +128,16 @@
       "type": "Feature",
       "properties": {
         "type": "path",
-        "name": "Branch to Restroom SW"
+        "id": "path_branch_restroom_sw",
+        "name": "Branch to Restroom SW",
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [-97.0446, 32.89625],
-          [-97.0449, 32.89625]
+          [-97.0446, 32.89625, 1],
+          [-97.0449, 32.89625, 1]
         ]
       }
     },
@@ -125,13 +145,16 @@
       "type": "Feature",
       "properties": {
         "type": "path",
-        "name": "Branch to Restroom NE"
+        "id": "path_branch_restroom_ne",
+        "name": "Branch to Restroom NE",
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [-97.0446, 32.89625],
-          [-97.0443, 32.89625]
+          [-97.0446, 32.89625, 1],
+          [-97.0443, 32.89625, 1]
         ]
       }
     },
@@ -139,13 +162,16 @@
       "type": "Feature",
       "properties": {
         "type": "path",
-        "name": "Branch to Restroom SE"
+        "id": "path_branch_restroom_se",
+        "name": "Branch to Restroom SE",
+        "level": 1,
+        "weight": 1.0
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [-97.0446, 32.89725],
-          [-97.0443, 32.89725]
+          [-97.0446, 32.89725, 1],
+          [-97.0443, 32.89725, 1]
         ]
       }
     }

@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
                 var statusMessage by remember { mutableStateOf("Ready") }
 
                 // SET TO TRUE TO WIPE AND RE-POPULATE FROM GEOJSON, THEN SET FALSE
-                val shouldInitializeDb = false
+                val shouldInitializeDb = true
 
                 LaunchedEffect(Unit) {
                     val db = FirebaseFirestore.getInstance()
@@ -95,11 +95,12 @@ class MainActivity : ComponentActivity() {
                 if (type == "poi") {
                     val coords = geom.getJSONArray("coordinates")
                     db.collection("MapNode").add(hashMapOf(
-                        "NodeID" to props.optString("node_id"),
-                        "Name" to props.optString("name"),
-                        "Location" to GeoPoint(coords.getDouble(1), coords.getDouble(0)),
-                        "Type" to "poi",
-                        "FloorLevel" to 3
+                        "id" to props.optString("id"),
+                        "type" to "poi",
+                        "name" to props.optString("name"),
+                        "level" to props.optInt("level"),
+                        "weight" to props.optDouble("weight"),
+                        "coordinates" to GeoPoint(coords.getDouble(1), coords.getDouble(0))
                     ))
                 } else if (type == "path") {
                     val coordsArray = geom.getJSONArray("coordinates")
@@ -109,9 +110,12 @@ class MainActivity : ComponentActivity() {
                         pathPoints.add(GeoPoint(pt.getDouble(1), pt.getDouble(0)))
                     }
                     db.collection("PathEdge").add(hashMapOf(
-                        "Name" to props.optString("name"),
-                        "PathPoints" to pathPoints,
-                        "IsOpen" to true
+                        "id" to props.optString("id"),
+                        "type" to "path",
+                        "name" to props.optString("name"),
+                        "level" to props.optInt("level"),
+                        "weight" to props.optDouble("weight"),
+                        "coordinates" to pathPoints
                     ))
                 }
             }
@@ -136,10 +140,12 @@ class MainActivity : ComponentActivity() {
                     }
                     
                     db.collection("MapFeature").add(hashMapOf(
-                        "Name" to props.optString("name"),
-                        "FeatureType" to props.optString("type"),
-                        "Geometry" to points,
-                        "FloorLevel" to 3
+                        "id" to props.optString("id"),
+                        "type" to props.optString("type"),
+                        "name" to props.optString("name"),
+                        "level" to props.optInt("level"),
+                        "coordinates" to points
+
                     ))
                 }
             }

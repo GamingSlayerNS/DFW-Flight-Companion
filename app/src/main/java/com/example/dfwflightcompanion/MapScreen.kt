@@ -206,11 +206,13 @@ private fun fetchDataFromFirestore(style: Style) {
     db.collection("MapFeature").get().addOnSuccessListener { result ->
         val featureList = mutableListOf<String>()
         result.forEach { doc ->
-            val points = doc.get("Geometry") as? List<GeoPoint> ?: return@forEach
-            val type = doc.getString("FeatureType") ?: ""
-            val name = doc.getString("Name") ?: ""
-            val coordString = points.joinToString(",") { "[${it.longitude}, ${it.latitude}]" }
-            featureList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name"}, "geometry": {"type": "Polygon", "coordinates": [[$coordString]]}}""")
+            val points = doc.get("coordinates") as? List<GeoPoint> ?: return@forEach
+            val type = doc.getString("type") ?: ""
+            val name = doc.getString("name") ?: ""
+            val id = doc.getString("id") ?: ""
+            val level = doc.getLong("level")?.toInt() ?: return@forEach
+            val coordString = points.joinToString(",") { "[${it.longitude}, ${it.latitude}, ${level}]" }
+            featureList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Polygon", "coordinates": [[$coordString]]}}""")
         }
         val geoJson = """{"type": "FeatureCollection", "features": [${featureList.joinToString(",")}]}"""
         style.getSourceAs<GeoJsonSource>("floorplan-source")?.setGeoJson(geoJson)
@@ -220,10 +222,14 @@ private fun fetchDataFromFirestore(style: Style) {
     db.collection("PathEdge").get().addOnSuccessListener { result ->
         val pathList = mutableListOf<String>()
         result.forEach { doc ->
-            val points = doc.get("PathPoints") as? List<GeoPoint> ?: return@forEach
-            val name = doc.getString("Name") ?: ""
-            val coordString = points.joinToString(",") { "[${it.longitude}, ${it.latitude}]" }
-            pathList.add("""{"type": "Feature", "properties": {"type": "path", "name": "$name"}, "geometry": {"type": "LineString", "coordinates": [$coordString]}}""")
+            val points = doc.get("coordinates") as? List<GeoPoint> ?: return@forEach
+            val type = doc.getString("type") ?: ""
+            val name = doc.getString("name") ?: ""
+            val id = doc.getString("id") ?: ""
+            val level = doc.getLong("level")?.toInt() ?: return@forEach
+            val weight = doc.getDouble("weight")?.toFloat() ?: return@forEach
+            val coordString = points.joinToString(",") { "[${it.longitude}, ${it.latitude}, ${level}]" }
+            pathList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level", "weight": "$weight" }, "geometry": {"type": "LineString", "coordinates": [$coordString]}}""")
         }
         val geoJson = """{"type": "FeatureCollection", "features": [${pathList.joinToString(",")}]}"""
         style.getSourceAs<GeoJsonSource>("routing-source")?.setGeoJson(geoJson)

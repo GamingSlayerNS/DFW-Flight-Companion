@@ -1,5 +1,7 @@
 package com.example.dfwflightcompanion
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +20,7 @@ import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.navigation.NavGraphBuilder
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -29,7 +32,13 @@ import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.iconImage
+import org.maplibre.android.style.layers.PropertyFactory.iconSize
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.geojson.Feature
+import org.maplibre.geojson.Point
 
 @Composable
 fun MapScreen() {
@@ -39,6 +48,10 @@ fun MapScreen() {
     
     // User's current location (Simulation)
     val userLocation = remember { mutableStateOf(LatLng(32.8993, -97.0446)) }
+
+    val graph = remember{
+        GraphBuilder.fromGeoJson(context)
+    }
 
     remember {
         MapLibre.getInstance(context)
@@ -138,6 +151,37 @@ fun MapScreen() {
                         )
                     )
 
+                    // Adding Markers
+                    val markerBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.restroom)
+                    val safeMarkerBitmap = markerBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                    val scaledMarkerBitmap = Bitmap.createScaledBitmap(safeMarkerBitmap, 200, 200, true)
+
+                    if(style.getImage("marker-icon") == null) {
+                        style.addImage("marker-icon", scaledMarkerBitmap)
+                    }
+
+                    // This adds a single marker
+                    // This will have to be replaced with all of the markers from Firebase and be displayed
+                    val markerPoint = Feature.fromGeometry(Point.fromLngLat(-97.04492, 32.89880)) // Restroom NW
+                    val markerSourceId = "marker-source"
+                    style.addSource(GeoJsonSource(markerSourceId, markerPoint))
+
+                    style.addLayer(
+                        SymbolLayer("marker-layer", markerSourceId).withProperties(
+                            iconImage("marker-icon"),
+                            iconSize(
+                                interpolate(
+                                    exponential(1.5f),    // scaling factor for smooth growth
+                                    zoom(),
+                                    stop(12, 0.4f),
+                                    stop(16, 0.8f),
+                                    stop(20, 1.6f)
+                                )
+                            ),
+                            iconAllowOverlap(false)
+                        )
+                    )
+
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
                             CameraPosition.Builder()
@@ -152,28 +196,54 @@ fun MapScreen() {
     }
 
     // Function to simulate navigation
-    val startNavigation = {
+    val startNavigation = { destLng: Double, destLat: Double ->
         mapView.getMapAsync { map ->
             val style = map.style
             if (style != null) {
                 val routeSource = style.getSourceAs<GeoJsonSource>("route-source")
-                
+
+                // Retrieving user's location
+                val userLng = userLocation.value.longitude
+                val userLat = userLocation.value.latitude
+
+                // Find nearest nodes for start and end locations
+                val startNode = Pathfinding.findNearestNode(
+                    userLng,
+                    userLat,
+                    graph.keys
+                )
+                val endNode = Pathfinding.findNearestNode(
+                    destLng,
+                    destLat,
+                    graph.keys
+                )
+
+                // Compute path
+                val pathNodes = Pathfinding.aStar(graph, startNode, endNode)
+                if(pathNodes.isEmpty()) return@getMapAsync
+
+                // Convert to GeoJSON coordinates
+                val coordinates = pathNodes.joinToString(","){
+                    "[${it.lng}, ${it.lat}]"
+                }
+
                 // Route from User Location to Gate A1
+                //                          [${userLocation.value.longitude}, ${userLocation.value.latitude}],
+                //                          [-97.04492, 32.89880]
                 val routeJson = """
                     {
                       "type": "Feature",
                       "geometry": {
                         "type": "LineString",
                         "coordinates": [
-                          [${userLocation.value.longitude}, ${userLocation.value.latitude}],
-                          [-97.0446, 32.8985]
+                          $coordinates
                         ]
                       }
                     }
                 """.trimIndent()
-                
+
                 routeSource?.setGeoJson(routeJson)
-                
+
                 // Animate camera to follow route
                 map.animateCamera(
                     CameraUpdateFactory.newCameraPosition(
@@ -185,6 +255,27 @@ fun MapScreen() {
                             .build()
                     ), 2000
                 )
+            }
+        }
+    }
+
+    mapView.getMapAsync { map ->
+        map.addOnMapClickListener { point ->
+            val screenPoint = map.projection.toScreenLocation(point)
+            val features = map.queryRenderedFeatures(screenPoint, "marker-layer")
+
+            if (features.isNotEmpty()) {
+                val clickedFeature = features[0]
+                val geometry = clickedFeature.geometry()
+
+                if (geometry is Point) {
+                    val destLng = geometry.longitude()
+                    val destLat = geometry.latitude()
+                    startNavigation(destLng, destLat)
+                }
+                true
+            } else {
+                false
             }
         }
     }
@@ -212,25 +303,25 @@ fun MapScreen() {
             modifier = Modifier.fillMaxSize()
         )
 
-        FloatingActionButton(
-            onClick = {
-                isNavigating = !isNavigating
-                if (isNavigating) startNavigation() else {
-                    // Reset route
-                    mapView.getMapAsync { map ->
-                        map.style?.getSourceAs<GeoJsonSource>("route-source")?.setGeoJson("{}")
-                        map.animateCamera(CameraUpdateFactory.zoomTo(16.0))
-                    }
-                }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Navigation,
-                contentDescription = if (isNavigating) "Stop Navigation" else "Start Navigation"
-            )
-        }
+//        FloatingActionButton(
+//            onClick = {
+//                isNavigating = !isNavigating
+//                if (isNavigating) startNavigation() else {
+//                    // Reset route
+//                    mapView.getMapAsync { map ->
+//                        map.style?.getSourceAs<GeoJsonSource>("route-source")?.setGeoJson("{}")
+//                        map.animateCamera(CameraUpdateFactory.zoomTo(16.0))
+//                    }
+//                }
+//            },
+//            modifier = Modifier
+//                .align(Alignment.BottomEnd)
+//                .padding(16.dp)
+//        ) {
+//            Icon(
+//                imageVector = Icons.Default.Navigation,
+//                contentDescription = if (isNavigating) "Stop Navigation" else "Start Navigation"
+//            )
+//        }
     }
 }

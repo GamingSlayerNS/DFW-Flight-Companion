@@ -19,8 +19,10 @@ import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.firebase.Firebase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.GeoPoint
+import com.google.firebase.functions.functions
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -65,6 +67,28 @@ fun MapScreen() {
                     )
                 }
             }
+        }
+    }
+
+    // Example Cloud Function call
+    LaunchedEffect(Unit) {
+        try {
+            val functions = Firebase.functions
+            // ONLY if testing locally:
+            // functions.useEmulator("127.0.0.1", 5001)
+            functions.useEmulator("10.0.2.2", 5001)
+
+            functions.getHttpsCallable("helloWorld")
+                .call()
+                .addOnSuccessListener { result ->
+                    val data = result.getData()
+                    Log.d("FirebaseFunctions", "Success: $data")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("FirebaseFunctions", "Error: ", e)
+                }
+        } catch (e: Exception) {
+            Log.e("FirebaseFunctions", "Failed to initialize functions", e)
         }
     }
 
@@ -136,7 +160,9 @@ fun MapScreen() {
                     }
                 }
             },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Navigation,

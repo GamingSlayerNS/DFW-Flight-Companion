@@ -3,24 +3,55 @@ package com.example.dfwflightcompanion
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavGraphBuilder
+import kotlin.math.roundToInt
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -195,6 +226,8 @@ fun MapScreen() {
         }
     }
 
+    var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+
     // Function to simulate navigation
     val startNavigation = { destLng: Double, destLat: Double ->
         mapView.getMapAsync { map ->
@@ -259,25 +292,46 @@ fun MapScreen() {
         }
     }
 
-    mapView.getMapAsync { map ->
-        map.addOnMapClickListener { point ->
-            val screenPoint = map.projection.toScreenLocation(point)
-            val features = map.queryRenderedFeatures(screenPoint, "marker-layer")
+    var showBox by remember { mutableStateOf(false) }
+    var offsetY by remember { mutableStateOf(0f) }
+    val closeThreshold = with(LocalDensity.current) { 120.dp.toPx() }
 
-            if (features.isNotEmpty()) {
-                val clickedFeature = features[0]
-                val geometry = clickedFeature.geometry()
 
-                if (geometry is Point) {
-                    val destLng = geometry.longitude()
-                    val destLat = geometry.latitude()
-                    startNavigation(destLng, destLat)
+    DisposableEffect(Unit) {
+        mapView.getMapAsync { map ->
+            map.addOnMapClickListener { point ->
+                val screenPoint = map.projection.toScreenLocation(point)
+                val features = map.queryRenderedFeatures(screenPoint, "marker-layer")
+
+                if (features.isNotEmpty()) {
+                    val clickedFeature = features[0]
+                    val geometry = clickedFeature.geometry()
+
+                    if (geometry is Point) {
+                        val destLng = geometry.longitude()
+                        val destLat = geometry.latitude()
+                        selectedDest = destLng to destLat   // store destination
+                        showBox = true
+                        // startNavigation(destLng, destLat)
+                        map.animateCamera(
+                            CameraUpdateFactory.newCameraPosition(
+                                CameraPosition.Builder()
+                                    .target(LatLng(destLat, destLng))
+                                    .zoom(18.0)
+                                    .bearing(180.0) // Face south
+                                    .tilt(45.0)
+                                    .build()
+                            ), 2000
+                        )
+                    }
+                    true
+                } else {
+                    false
                 }
-                true
-            } else {
-                false
             }
         }
+
+        onDispose { }
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -302,6 +356,177 @@ fun MapScreen() {
             factory = { mapView },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Compose UI layer
+        if (showBox) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(0, offsetY.roundToInt()) }
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 32.dp,
+                                topEnd = 32.dp
+                            )
+                        )
+                        .align(Alignment.BottomCenter)
+                        .background(androidx.compose.ui.graphics.Color(0xFFF5F5F5))
+                        .draggable(
+                            orientation = Orientation.Vertical,
+                            state = rememberDraggableState { delta ->
+                                offsetY = (offsetY + delta).coerceAtLeast(0f)
+                            },
+                            onDragStopped = {
+                                if (offsetY > closeThreshold) {
+                                    showBox = false   // closes the box
+                                }
+                                offsetY = 0f
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(6.dp)
+                            .align(Alignment.TopCenter),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(60.dp)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(androidx.compose.ui.graphics.Color.LightGray)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(24.dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(androidx.compose.ui.graphics.Color.Gray)
+                            .clickable { showBox = false },
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "✕",
+                            color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
+                            fontSize = 24.sp
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 40.dp, start = 36.dp),
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.Top
+                    ) {
+                        Text(
+                            text = "Women's Restroom",
+                            color = androidx.compose.ui.graphics.Color.Black,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.SansSerif
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "Occupancy Status",
+                                color = androidx.compose.ui.graphics.Color.Black,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                            Text(
+                                text = "OPEN",
+                                color = androidx.compose.ui.graphics.Color(0xFF00C853),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "Crowd Level",
+                                color = androidx.compose.ui.graphics.Color.Black,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                modifier = Modifier.alignBy(FirstBaseline)
+                            )
+                            Text(
+                                text = "Low",
+                                color = androidx.compose.ui.graphics.Color(0xFF00C853),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                modifier = Modifier.alignBy(FirstBaseline)
+                            )
+                            Text(
+                                text = "Last Updated",
+                                color = androidx.compose.ui.graphics.Color.Gray,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                modifier = Modifier
+                                    .alignBy(FirstBaseline)
+                                    .padding(start = 6.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Button(
+                                onClick = {
+                                    showBox = false
+                                }
+                            ) {
+                                Text("Update Crowd Level")
+                            }
+
+                            Button(
+                                onClick = {
+                                    showBox = false
+                                    selectedDest?.let { (lng, lat) ->
+                                        startNavigation(lng, lat)
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Navigation,
+                                    contentDescription = "Start Navigation",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Start Navigation")
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
 //        FloatingActionButton(
 //            onClick = {

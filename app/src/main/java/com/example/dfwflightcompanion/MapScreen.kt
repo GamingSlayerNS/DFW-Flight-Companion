@@ -58,6 +58,7 @@ import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression.*
@@ -72,15 +73,29 @@ import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.Point
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
+
+enum class Direction {
+    UP, DOWN, LEFT, RIGHT
+}
 
 @Composable
 fun MapScreen() {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var isNavigating by remember { mutableStateOf(false) }
+    val mapRef = remember { mutableStateOf<MapLibreMap?>(null)}
     
     // User's current location (Simulation)
     val userLocation = remember { mutableStateOf(LatLng(32.8993, -97.0446)) }
+    var currentDestination by remember {
+        mutableStateOf<Pair<Double, Double>?>(null)
+    }
 
     val graph = remember{
         GraphBuilder.fromGeoJson(context)
@@ -94,6 +109,7 @@ fun MapScreen() {
         MapView(context).apply {
             onCreate(null)
             getMapAsync { map ->
+                mapRef.value = map
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
                     setupSourcesAndLayers(context, style, userLocation.value)
                     fetchDataFromFirestore(style)
@@ -134,68 +150,71 @@ fun MapScreen() {
 
     var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
+    fun computeRoute(userLng: Double, userLat: Double, destLng: Double, destLat: Double): List<Node>? {
+        // Find nearest nodes for start location
+        val userNode = Node(userLng, userLat)
+        val (snappedPoint, a, b) = Pathfinding.findClosestPointOnGraph(userNode, graph)
+
+        // Insert snappedPoint into graph
+        val updatedGraph = Pathfinding.insertTemporaryNode(graph, a, b, snappedPoint)
+
+        // Now snappedPoint IS the start node
+        val startNode = snappedPoint
+        val endNode = Pathfinding.findNearestNode(destLng, destLat, graph.keys)
+
+        // Run A*
+        val pathNodes = Pathfinding.aStar(updatedGraph, startNode, endNode)
+        if(pathNodes.isEmpty()) return null
+
+        return pathNodes
+    }
+
     // Function to simulate navigation
-    val startNavigation = { destLng: Double, destLat: Double ->
-        mapView.getMapAsync { map ->
-            val style = map.style
-            if (style != null) {
-                val routeSource = style.getSourceAs<GeoJsonSource>("route-source")
+    val startNavigation = startNav@{ destLng: Double, destLat: Double ->
+        isNavigating = true
+        val map = mapRef.value ?: return@startNav
+        val style = map.style ?: return@startNav
 
-                // Retrieving user's location
-                val userLng = userLocation.value.longitude
-                val userLat = userLocation.value.latitude
+        val routeSource = style.getSourceAs<GeoJsonSource>("route-source")
 
-                // Find nearest nodes for start and end locations
-                val startNode = Pathfinding.findNearestNode(
-                    userLng,
-                    userLat,
-                    graph.keys
-                )
-                val endNode = Pathfinding.findNearestNode(
-                    destLng,
-                    destLat,
-                    graph.keys
-                )
+        // Retrieving user's location
+        val userLng = userLocation.value.longitude
+        val userLat = userLocation.value.latitude
 
-                // Compute path
-                val pathNodes = Pathfinding.aStar(graph, startNode, endNode)
-                if(pathNodes.isEmpty()) return@getMapAsync
+        // Calculate the route path
+        val path = computeRoute(userLng, userLat, destLng, destLat) ?: return@startNav
 
-                // Convert to GeoJSON coordinates
-                val coordinates = pathNodes.joinToString(","){
-                    "[${it.lng}, ${it.lat}]"
-                }
-
-                // Route from User Location to Gate A1
-                //                          [${userLocation.value.longitude}, ${userLocation.value.latitude}],
-                //                          [-97.04492, 32.89880]
-                val routeJson = """
-                    {
-                      "type": "Feature",
-                      "geometry": {
-                        "type": "LineString",
-                        "coordinates": [
-                          $coordinates
-                        ]
-                      }
-                    }
-                """.trimIndent()
-
-                routeSource?.setGeoJson(routeJson)
-
-                // Animate camera to follow route
-                map.animateCamera(
-                    CameraUpdateFactory.newCameraPosition(
-                        CameraPosition.Builder()
-                            .target(LatLng(32.8985, -97.0446))
-                            .zoom(18.0)
-                            .bearing(180.0) // Face south
-                            .tilt(45.0)
-                            .build()
-                    ), 2000
-                )
-            }
+        // Convert to GeoJSON coordinates
+        val coordinates = path.joinToString(","){
+            "[${it.lng}, ${it.lat}]"
         }
+
+        // Route from User Location to destination
+        val routeJson = """
+            {
+              "type": "Feature",
+              "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                  $coordinates
+                ]
+              }
+            }
+        """.trimIndent()
+
+        routeSource?.setGeoJson(routeJson)
+
+        // Animate camera to follow route
+        map.animateCamera(
+            CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder()
+                    .target(userLocation.value)
+                    .zoom(18.0)
+                    .bearing(map.cameraPosition.bearing) // Face direction of the user
+                    .tilt(45.0)
+                    .build()
+            ), 2000
+        )
     }
 
     var showAmenityBox by remember { mutableStateOf(false) } // box for viewing amenity details
@@ -242,8 +261,9 @@ fun MapScreen() {
         )
     }
 
+        // Checks to see if marker on the map is clicked
     DisposableEffect(Unit) {
-        mapView.getMapAsync { map ->
+    mapView.getMapAsync { map ->
             map.addOnMapClickListener { point ->
                 val screenPoint = map.projection.toScreenLocation(point)
                 val features = map.queryRenderedFeatures(screenPoint, "marker-layer")
@@ -255,6 +275,7 @@ fun MapScreen() {
                     if (geometry is Point) {
                         val destLng = geometry.longitude()
                         val destLat = geometry.latitude()
+                    currentDestination = Pair(destLng, destLat)
                         selectedDest = destLng to destLat   // store destination
                         showAmenityBox = true
                         // startNavigation(destLng, destLat)
@@ -279,6 +300,80 @@ fun MapScreen() {
         onDispose { }
     }
 
+    // Function to update the navigation route as the user moves along it
+    fun updateNavigation(destLng: Double, destLat: Double) {
+        val map = mapRef.value ?: return
+        val style = map.style ?: return
+        val routeSource = style.getSourceAs<GeoJsonSource>("route-source") ?: return
+
+        // Retrieving user's location
+        val userLng = userLocation.value.longitude
+        val userLat = userLocation.value.latitude
+
+        // Calculate the route path
+        val path = computeRoute(userLng, userLat, destLng, destLat) ?: return
+
+        // Turn path into coordinates and add to map
+        val coordinates = path.joinToString(",") {
+            "[${it.lng}, ${it.lat}]"
+        }
+
+        val routeJson = """
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [ $coordinates ]
+          }
+        }
+    """.trimIndent()
+
+        routeSource.setGeoJson(routeJson)
+    }
+
+    // Updating the users location when the user is moved
+    fun updateUserLocation(newLng: Double, newLat: Double) {
+        val map = mapRef.value ?: return
+        val style = map.style ?: return
+
+        val source = style.getSourceAs<GeoJsonSource>("user-location-source") ?: return
+
+        val updatedJson = """
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [$newLng, $newLat]
+          }
+        }
+        """.trimIndent()
+
+        source.setGeoJson(updatedJson)
+
+        if(isNavigating){
+            map.animateCamera(
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.Builder()
+                        .target(LatLng(newLat, newLng))
+                        .zoom(18.0)
+                        .tilt(45.0)
+                        .bearing(map.cameraPosition.bearing) // Face direction of the user
+                        .build()
+                ),
+                500
+            )
+        }
+    }
+
+    LaunchedEffect(userLocation.value, currentDestination) {
+
+        val destination = currentDestination ?: return@LaunchedEffect
+
+        val (destLng, destLat) = destination
+
+        updateNavigation(destLng, destLat)
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -295,6 +390,28 @@ fun MapScreen() {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
+
+    fun moveUser(direction: Direction) {
+        val step = 0.0001  // adjust for speed
+
+        val currentLng = userLocation.value.longitude
+        val currentLat = userLocation.value.latitude
+
+        val (newLng, newLat) = when (direction) {
+            Direction.UP -> currentLng to (currentLat + step)
+            Direction.DOWN -> currentLng to (currentLat - step)
+            Direction.LEFT -> (currentLng - step) to currentLat
+            Direction.RIGHT -> (currentLng + step) to currentLat
+        }
+
+        // update your state
+        userLocation.value = LatLng(newLat, newLng)
+
+        // update map + camera
+        updateUserLocation(newLng, newLat)
+    }
+
+
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
@@ -473,26 +590,27 @@ fun MapScreen() {
             }
         }
 
-//        FloatingActionButton(
-//            onClick = {
-//                isNavigating = !isNavigating
-//                if (isNavigating) startNavigation() else {
-//                    // Reset route
-//                    mapView.getMapAsync { map ->
-//                        map.style?.getSourceAs<GeoJsonSource>("route-source")?.setGeoJson("{}")
-//                        map.animateCamera(CameraUpdateFactory.zoomTo(16.0))
-//                    }
-//                }
-//            },
-//            modifier = Modifier
-//                .align(Alignment.BottomEnd)
-//                .padding(16.dp)
-//        ) {
-//            Icon(
-//                imageVector = Icons.Default.Navigation,
-//                contentDescription = if (isNavigating) "Stop Navigation" else "Start Navigation"
-//            )
-//        }
+        Column {
+            Button(onClick = { moveUser(Direction.UP) }, modifier = Modifier.padding(start = 35.dp)) {
+                Text("N")
+            }
+
+            Row {
+                Button(onClick = { moveUser(Direction.LEFT) }) {
+                    Text("W")
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Button(onClick = { moveUser(Direction.RIGHT) }) {
+                    Text("E")
+                }
+            }
+
+            Button(onClick = { moveUser(Direction.DOWN) }, modifier = Modifier.padding(start = 35.dp)) {
+                Text("S")
+            }
+        }
     }
 }
 

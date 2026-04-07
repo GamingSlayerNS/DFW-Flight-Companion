@@ -83,4 +83,83 @@ object Pathfinding {
 
         return path.reversed()
     }
+
+    fun closestPointOnSegment(p: Node, a: Node, b: Node): Node {
+        val ax = a.lng
+        val ay = a.lat
+        val bx = b.lng
+        val by = b.lat
+        val px = p.lng
+        val py = p.lat
+
+        val abx = bx - ax
+        val aby = by - ay
+        val apx = px - ax
+        val apy = py - ay
+
+        val abLenSq = abx * abx + aby * aby
+        val dot = apx * abx + apy * aby
+        val t = (dot / abLenSq).coerceIn(0.0, 1.0)
+
+        return Node(
+            lng = ax + t * abx,
+            lat = ay + t * aby
+        )
+    }
+
+    fun findClosestPointOnGraph(
+        user: Node,
+        graph: Map<Node, List<Node>>
+    ): Triple<Node, Node, Node> {
+
+        var closestPoint = user
+        var bestA = user
+        var bestB = user
+        var minDist = Double.MAX_VALUE
+
+        for ((a, neighbors) in graph) {
+            for (b in neighbors) {
+
+                val projected = closestPointOnSegment(user, a, b)
+
+                val dx = projected.lng - user.lng
+                val dy = projected.lat - user.lat
+                val dist = dx * dx + dy * dy
+
+                if (dist < minDist) {
+                    minDist = dist
+                    closestPoint = projected
+                    bestA = a
+                    bestB = b
+                }
+            }
+        }
+
+        return Triple(closestPoint, bestA, bestB)
+    }
+
+    fun insertTemporaryNode(
+        graph: Map<Node, List<Node>>,
+        a: Node,
+        b: Node,
+        snapped: Node
+    ): Map<Node, List<Node>> {
+
+        val newGraph = graph.mapValues { it.value.toMutableList() }.toMutableMap()
+
+        // Remove original edge
+        newGraph[a]?.remove(b)
+        newGraph[b]?.remove(a)
+
+        // Add snapped node
+        newGraph[snapped] = mutableListOf()
+
+        // Connect snapped point to both ends
+        newGraph[a]?.add(snapped)
+        newGraph[b]?.add(snapped)
+        newGraph[snapped]?.add(a)
+        newGraph[snapped]?.add(b)
+
+        return newGraph
+    }
 }

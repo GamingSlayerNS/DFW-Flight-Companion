@@ -5,27 +5,39 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 
 @Composable
 fun BottomNavigationBar(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     val startDestination = Destination.MAP
-    var selectedDestination by rememberSaveable { mutableIntStateOf(startDestination.ordinal) }
+    
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
     Scaffold(
         modifier = modifier,
         bottomBar = {
             NavigationBar {
                 Destination.entries.forEachIndexed { index, destination ->
+                    val isSelected = currentRoute == destination.route
+                    
                     NavigationBarItem(
-                        selected = selectedDestination == index,
+                        selected = isSelected,
                         onClick = {
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.startDestinationId)
-                                launchSingleTop = true
+                            if (!isSelected) {
+                                navController.navigate(destination.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    // Avoid multiple copies of the same destination
+                                    launchSingleTop = true
+                                    // Restore state when reselecting a previously selected item
+                                    restoreState = true
+                                }
                             }
-                            selectedDestination = index
                         },
                         icon = {
                             Icon(

@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.firebase.functions)
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.9.7")
+    implementation("com.mapbox.mapboxsdk:mapbox-sdk-geojson:5.1.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

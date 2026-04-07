@@ -10,11 +10,6 @@ const db = getFirestore();
 
 setGlobalOptions({maxInstances: 10});
 
-exports.helloWorld = onCall((request) => {
-  logger.info("Hello logs!", {structuredData: true});
-  return "Hello from Firebase!";
-});
-
 /**
  * Fetches all amenities from the "Amenity" collection.
  */

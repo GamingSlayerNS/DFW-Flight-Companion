@@ -15,8 +15,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        Log.d("FirestoreTest", "MainActivity onCreate started")
-        
+        Log.d("FirestoreDB", "MainActivity onCreate started")
+
         enableEdgeToEdge()
         setContent {
             DFWFlightCompanionTheme {
@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun populateRestrooms(db: FirebaseFirestore, onComplete: () -> Unit) {
-        Log.d("FirestoreTest", "Populating 15 sets of restrooms...")
+        Log.d("FirestoreDB", "Populating 15 sets of restrooms...")
         val batch = db.batch()
         
         RestroomData.restroomSets.forEach { restroom ->
@@ -68,9 +68,9 @@ class MainActivity : ComponentActivity() {
 
         batch.commit().addOnCompleteListener { task ->
             if (task.isSuccessful) {
-                Log.d("FirestoreTest", "Successfully added 45 restrooms.")
+                Log.d("FirestoreDB", "Successfully added 45 restrooms.")
             } else {
-                Log.e("FirestoreTest", "Failed to add restrooms", task.exception)
+                Log.e("FirestoreDB", "Failed to add restrooms", task.exception)
             }
             onComplete()
         }
@@ -106,7 +106,7 @@ class MainActivity : ComponentActivity() {
 
     private fun seedFromGeoJson(db: FirebaseFirestore, onComplete: () -> Unit) {
         try {
-            Log.d("FirestoreTest", "Starting GeoJSON Seed...")
+            Log.d("FirestoreDB", "Starting GeoJSON Seed...")
             
             // 1. Seed Terminal Root
             db.collection("Terminal").add(hashMapOf(
@@ -227,11 +227,11 @@ class MainActivity : ComponentActivity() {
                 "ReportType" to "Maintenance"
             ))
 
-            Log.d("FirestoreTest", "GeoJSON Seeding Complete!")
+            Log.d("FirestoreDB", "GeoJSON Seeding Complete!")
             onComplete()
 
         } catch (e: Exception) {
-            Log.e("FirestoreTest", "GeoJSON Seed Failed", e)
+            Log.e("FirestoreDB", "GeoJSON Seed Failed", e)
         }
     }
 }

@@ -1,0 +1,73 @@
+const {setGlobalOptions} = require("firebase-functions");
+const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const logger = require("firebase-functions/logger");
+const {initializeApp} = require("firebase-admin/app");
+const {getFirestore} = require("firebase-admin/firestore");
+
+// Initialize Admin SDK to access Firestore
+initializeApp();
+const db = getFirestore();
+
+setGlobalOptions({maxInstances: 10});
+
+exports.helloWorld = onCall((request) => {
+  logger.info("Hello logs!", {structuredData: true});
+  return "Hello from Firebase!";
+});
+
+/**
+ * Fetches all amenities from the "Amenity" collection.
+ */
+exports.getAmenities = onCall(async (request) => {
+  try {
+    logger.info("Fetching amenities from Firestore...");
+    const snapshot = await db.collection("Amenity").get();
+
+    const amenities = [];
+    snapshot.forEach(doc => {
+      amenities.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+
+    logger.info(`Successfully fetched ${amenities.length} amenities.`);
+    return amenities;
+  } catch (error) {
+    logger.error("Error fetching amenities:", error);
+    throw new HttpsError(
+      "internal",
+      "Failed to fetch amenities from the database."
+    );
+  }
+});
+
+/**
+ * Fetches the first user profile from the "User" collection.
+ */
+exports.getUserProfile = onCall(async (request) => {
+  try {
+    logger.info("Fetching user profile from Firestore...");
+    const snapshot = await db.collection("User").limit(1).get();
+
+    if (snapshot.empty) {
+      logger.info("No user profiles found.");
+      return null;
+    }
+
+    const doc = snapshot.docs[0];
+    const profile = {
+      id: doc.id,
+      ...doc.data()
+    };
+
+    logger.info(`Successfully fetched profile for user: ${profile.Username || profile.id}`);
+    return profile;
+  } catch (error) {
+    logger.error("Error fetching user profile:", error);
+    throw new HttpsError(
+      "internal",
+      "Failed to fetch user profile from the database."
+    );
+  }
+});

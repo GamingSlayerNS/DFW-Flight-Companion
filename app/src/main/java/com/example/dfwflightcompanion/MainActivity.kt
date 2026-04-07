@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import com.example.dfwflightcompanion.ui.theme.DFWFlightCompanionTheme
 import com.google.firebase.firestore.FirebaseFirestore
@@ -25,6 +24,8 @@ class MainActivity : ComponentActivity() {
 
                 // SET TO TRUE TO WIPE AND RE-POPULATE FROM GEOJSON, THEN SET FALSE
                 val shouldInitializeDb = false
+                // SET TO TRUE TO POPULATE RESTROOMS, THEN SET FALSE
+                val shouldInitializeRestrooms = false
 
                 LaunchedEffect(Unit) {
                     val db = FirebaseFirestore.getInstance()
@@ -35,10 +36,43 @@ class MainActivity : ComponentActivity() {
                             statusMessage = "Database Population Complete!"
                         }
                     }
+
+                    if (shouldInitializeRestrooms) {
+                        statusMessage = "Populating Restrooms..."
+                        populateRestrooms(db) {
+                            statusMessage = "Restroom Population Complete!"
+                        }
+                    }
                 }
 
                 BottomNavigationBar()
             }
+        }
+    }
+
+    private fun populateRestrooms(db: FirebaseFirestore, onComplete: () -> Unit) {
+        Log.d("FirestoreTest", "Populating 15 sets of restrooms...")
+        val batch = db.batch()
+        
+        RestroomData.restroomSets.forEach { restroom ->
+            val docRef = db.collection("Amenity").document(restroom.id)
+            batch.set(docRef, hashMapOf(
+                "AmenityID" to restroom.id,
+                "Name" to restroom.name,
+                "AmenityType" to "Restroom",
+                "SubTypeName" to restroom.type,
+                "IsAccessible" to restroom.isAccessible,
+                "NodeID" to restroom.nodeId
+            ))
+        }
+
+        batch.commit().addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                Log.d("FirestoreTest", "Successfully added 45 restrooms.")
+            } else {
+                Log.e("FirestoreTest", "Failed to add restrooms", task.exception)
+            }
+            onComplete()
         }
     }
 
@@ -151,15 +185,6 @@ class MainActivity : ComponentActivity() {
             }
 
             //4. Add remaining Collections
-            // Amenity
-            db.collection("Amenity").add(hashMapOf(
-                "AmenityID" to "A1",
-                "Name" to "Restroom",
-                "NodeID" to "N1",
-                "AmenityType" to "Restroom",
-                "IsAccessible" to true
-            ))
-
             // AmenityUnit
             db.collection("AmenityUnit").add(hashMapOf(
                 "StatusID" to "S1",

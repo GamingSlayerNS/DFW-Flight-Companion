@@ -16,3 +16,4 @@ local.properties
 /.kotlin
 *.log
 .agents
+firebase-debug.log

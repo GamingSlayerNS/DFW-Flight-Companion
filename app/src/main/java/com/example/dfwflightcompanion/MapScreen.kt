@@ -116,7 +116,6 @@ fun MapScreen() {
         try {
             val functions = Firebase.functions
             // ONLY if testing locally:
-            // functions.useEmulator("127.0.0.1", 5001)
             functions.useEmulator("10.0.2.2", 5001)
 
             functions.getHttpsCallable("helloWorld")

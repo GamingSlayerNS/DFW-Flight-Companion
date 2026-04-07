@@ -336,7 +336,7 @@ fun MapScreen() {
         val map = mapRef.value ?: return
         val style = map.style ?: return
 
-        val source = style.getSourceAs<GeoJsonSource>("user-location-source") ?: return
+        val source = style.getSourceAs<GeoJsonSource>("user-source") ?: return
 
         val updatedJson = """
         {
@@ -366,12 +366,13 @@ fun MapScreen() {
     }
 
     LaunchedEffect(userLocation.value, currentDestination) {
+        if(isNavigating) {
+            val destination = currentDestination ?: return@LaunchedEffect
 
-        val destination = currentDestination ?: return@LaunchedEffect
+            val (destLng, destLat) = destination
 
-        val (destLng, destLat) = destination
-
-        updateNavigation(destLng, destLat)
+            updateNavigation(destLng, destLat)
+        }
     }
 
     DisposableEffect(lifecycleOwner) {

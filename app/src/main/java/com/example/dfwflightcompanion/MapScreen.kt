@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
+import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,6 +49,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.roundToInt
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.GeoPoint
+import com.google.firebase.functions.functions
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -88,137 +93,42 @@ fun MapScreen() {
         MapView(context).apply {
             onCreate(null)
             getMapAsync { map ->
-                map.setStyle(
-                    Style.Builder()
-                        .fromUri("https://demotiles.maplibre.org/style.json")
-                ) { style ->
-                    val sourceId = "floorplan-source"
-                    style.addSource(GeoJsonSource(sourceId, java.net.URI("asset://floorplan.geojson")))
-
-                    // Background Layer (Building)
-                    style.addLayer(
-                        FillLayer("building-layer", sourceId).withProperties(
-                            PropertyFactory.fillColor(color(Color.LTGRAY)),
-                            PropertyFactory.fillOpacity(0.5f)
-                        ).withFilter(eq(get("type"), literal("building")))
-                    )
-
-                    // Hallway Layer
-                    style.addLayer(
-                        FillLayer("hallway-layer", sourceId).withProperties(
-                            PropertyFactory.fillColor(color(Color.WHITE))
-                        ).withFilter(eq(get("type"), literal("hallway")))
-                    )
-
-                    // Room Layer (Gates, Restrooms, etc.)
-                    style.addLayer(
-                        FillLayer("room-layer", sourceId).withProperties(
-                            PropertyFactory.fillColor(
-                                match(
-                                    get("type"),
-                                    literal("room"), color("#BBDEFB".toColorInt()),
-                                    literal("restroom"), color("#C8E6C9".toColorInt()),
-                                    literal("entrance"), color("#FFF9C4".toColorInt()),
-                                    literal("exit"), color("#FFCDD2".toColorInt()),
-                                    color(Color.GRAY)
-                                )
-                            ),
-                            PropertyFactory.fillOutlineColor(Color.DKGRAY)
-                        ).withFilter(
-                            any(
-                                eq(get("type"), literal("room")),
-                                eq(get("type"), literal("restroom")),
-                                eq(get("type"), literal("entrance")),
-                                eq(get("type"), literal("exit"))
-                            )
-                        )
-                    )
-
-                    // Routing Layer (Red Lines)
-                    val routingSourceId = "routing-source"
-                    style.addSource(GeoJsonSource(routingSourceId, java.net.URI("asset://routing.geojson")))
-                    style.addLayer(
-                        LineLayer("routing-layer", routingSourceId).withProperties(
-                            PropertyFactory.lineColor(Color.RED),
-                            PropertyFactory.lineWidth(1f),
-                            PropertyFactory.lineOpacity(0.6f)
-                        ).withFilter(eq(get("type"), literal("path")))
-                    )
-
-                    // Navigation Route Layer (Active path)
-                    val routeSourceId = "route-source"
-                    style.addSource(GeoJsonSource(routeSourceId))
-                    style.addLayer(
-                        LineLayer("route-layer", routeSourceId).withProperties(
-                            PropertyFactory.lineColor(Color.BLUE),
-                            PropertyFactory.lineWidth(5f),
-                            PropertyFactory.lineCap("round"),
-                            PropertyFactory.lineJoin("round")
-                        )
-                    )
-
-                    // User Location Layer (Blue Dot)
-                    val userSourceId = "user-location-source"
-                    val userPointJson = """
-                        {
-                          "type": "Feature",
-                          "geometry": {
-                            "type": "Point",
-                            "coordinates": [${userLocation.value.longitude}, ${userLocation.value.latitude}]
-                          }
-                        }
-                    """.trimIndent()
-                    style.addSource(GeoJsonSource(userSourceId, userPointJson))
-                    style.addLayer(
-                        CircleLayer("user-location-layer", userSourceId).withProperties(
-                            PropertyFactory.circleColor(Color.BLUE),
-                            PropertyFactory.circleRadius(8f),
-                            PropertyFactory.circleStrokeColor(Color.WHITE),
-                            PropertyFactory.circleStrokeWidth(2f)
-                        )
-                    )
-
-                    // Adding Markers
-                    val markerBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.restroom)
-                    val safeMarkerBitmap = markerBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                    val scaledMarkerBitmap = Bitmap.createScaledBitmap(safeMarkerBitmap, 200, 200, true)
-
-                    if(style.getImage("marker-icon") == null) {
-                        style.addImage("marker-icon", scaledMarkerBitmap)
-                    }
-
-                    // This adds a single marker
-                    // This will have to be replaced with all of the markers from Firebase and be displayed
-                    val markerPoint = Feature.fromGeometry(Point.fromLngLat(-97.04492, 32.89880)) // Restroom NW
-                    val markerSourceId = "marker-source"
-                    style.addSource(GeoJsonSource(markerSourceId, markerPoint))
-
-                    style.addLayer(
-                        SymbolLayer("marker-layer", markerSourceId).withProperties(
-                            iconImage("marker-icon"),
-                            iconSize(
-                                interpolate(
-                                    exponential(1.5f),    // scaling factor for smooth growth
-                                    zoom(),
-                                    stop(12, 0.4f),
-                                    stop(16, 0.8f),
-                                    stop(20, 1.6f)
-                                )
-                            ),
-                            iconAllowOverlap(false)
-                        )
-                    )
-
+                map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
+                    setupSourcesAndLayers(style, userLocation.value)
+                    fetchDataFromFirestore(style)
+                    
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
                             CameraPosition.Builder()
-                                .target(LatLng(32.897, -97.042))
+                                .target(LatLng(32.8974, -97.0446))
                                 .zoom(16.0)
                                 .build()
                         )
                     )
                 }
             }
+        }
+    }
+
+    // Example Cloud Function call
+    LaunchedEffect(Unit) {
+        try {
+            val functions = Firebase.functions
+            // ONLY if testing locally:
+            // functions.useEmulator("127.0.0.1", 5001)
+            functions.useEmulator("10.0.2.2", 5001)
+
+            functions.getHttpsCallable("helloWorld")
+                .call()
+                .addOnSuccessListener { result ->
+                    val data = result.getData()
+                    Log.d("FirebaseFunctions", "Success: $data")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("FirebaseFunctions", "Error: ", e)
+                }
+        } catch (e: Exception) {
+            Log.e("FirebaseFunctions", "Failed to initialize functions", e)
         }
     }
 
@@ -583,5 +493,126 @@ fun MapScreen() {
 //                contentDescription = if (isNavigating) "Stop Navigation" else "Start Navigation"
 //            )
 //        }
+    }
+}
+
+private fun setupSourcesAndLayers(style: Style, userLoc: LatLng) {
+    // 1. Floorplan Sources
+    style.addSource(GeoJsonSource("floorplan-source"))
+    style.addLayer(FillLayer("building-layer", "floorplan-source").withProperties(
+        PropertyFactory.fillColor(color(Color.LTGRAY)),
+        PropertyFactory.fillOpacity(0.5f)
+    ).withFilter(eq(get("type"), literal("building"))))
+
+    style.addLayer(FillLayer("hallway-layer", "floorplan-source").withProperties(
+        PropertyFactory.fillColor(color(Color.WHITE))
+    ).withFilter(eq(get("type"), literal("hallway"))))
+
+    style.addLayer(FillLayer("room-layer", "floorplan-source").withProperties(
+        PropertyFactory.fillColor(match(get("type"),
+            literal("room"), color("#BBDEFB".toColorInt()),
+            literal("restroom"), color("#C8E6C9".toColorInt()),
+            literal("entrance"), color("#FFF9C4".toColorInt()),
+            literal("exit"), color("#FFCDD2".toColorInt()),
+            color(Color.GRAY))),
+        PropertyFactory.fillOutlineColor(Color.DKGRAY)
+    ).withFilter(any(
+        eq(get("type"), literal("room")), eq(get("type"), literal("restroom")),
+        eq(get("type"), literal("entrance")), eq(get("type"), literal("exit"))
+    )))
+
+    // 2. Routing Sources
+    style.addSource(GeoJsonSource("routing-source"))
+    style.addLayer(LineLayer("routing-layer", "routing-source").withProperties(
+        PropertyFactory.lineColor(Color.RED),
+        PropertyFactory.lineWidth(1f),
+        PropertyFactory.lineOpacity(0.6f)
+    ))
+
+    // 3. Active Navigation Route Source
+    style.addSource(GeoJsonSource("route-source"))
+    style.addLayer(LineLayer("route-layer", "route-source").withProperties(
+        PropertyFactory.lineColor(Color.BLUE),
+        PropertyFactory.lineWidth(5f),
+        PropertyFactory.lineCap("round"),
+        PropertyFactory.lineJoin("round")
+    ))
+
+    // 4. User Location
+    val userPoint = """{"type": "Feature", "geometry": {"type": "Point", "coordinates": [${userLoc.longitude}, ${userLoc.latitude}]}}"""
+    style.addSource(GeoJsonSource("user-source", userPoint))
+    style.addLayer(CircleLayer("user-layer", "user-source").withProperties(
+        PropertyFactory.circleColor(Color.BLUE),
+        PropertyFactory.circleRadius(8f),
+        PropertyFactory.circleStrokeColor(Color.WHITE),
+        PropertyFactory.circleStrokeWidth(2f)
+    ))
+
+    // 5. Adding Markers
+                    val markerBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.restroom)
+                    val safeMarkerBitmap = markerBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                    val scaledMarkerBitmap = Bitmap.createScaledBitmap(safeMarkerBitmap, 200, 200, true)
+
+                    if(style.getImage("marker-icon") == null) {
+                        style.addImage("marker-icon", scaledMarkerBitmap)
+                    }
+
+                    // This adds a single marker
+                    // This will have to be replaced with all of the markers from Firebase and be displayed
+                    val markerPoint = Feature.fromGeometry(Point.fromLngLat(-97.04492, 32.89880)) // Restroom NW
+                    val markerSourceId = "marker-source"
+                    style.addSource(GeoJsonSource(markerSourceId, markerPoint))
+
+                    style.addLayer(
+                        SymbolLayer("marker-layer", markerSourceId).withProperties(
+                            iconImage("marker-icon"),
+                            iconSize(
+                                interpolate(
+                                    exponential(1.5f),    // scaling factor for smooth growth
+                                    zoom(),
+                                    stop(12, 0.4f),
+                                    stop(16, 0.8f),
+                                    stop(20, 1.6f)
+                                )
+                            ),
+                            iconAllowOverlap(false)
+                        )
+                    )
+}
+
+private fun fetchDataFromFirestore(style: Style) {
+    val db = FirebaseFirestore.getInstance()
+
+    // 1. Fetch MapFeatures
+    db.collection("MapFeature").get().addOnSuccessListener { result ->
+        val featureList = mutableListOf<String>()
+        result.forEach { doc ->
+            val points = doc.get("coordinates") as? List<GeoPoint> ?: return@forEach
+            val type = doc.getString("type") ?: ""
+            val name = doc.getString("name") ?: ""
+            val id = doc.getString("id") ?: ""
+            val level = doc.getLong("level")?.toInt() ?: return@forEach
+            val coordString = points.joinToString(",") { "[${it.longitude}, ${it.latitude}, ${level}]" }
+            featureList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Polygon", "coordinates": [[$coordString]]}}""")
+        }
+        val geoJson = """{"type": "FeatureCollection", "features": [${featureList.joinToString(",")}]}"""
+        style.getSourceAs<GeoJsonSource>("floorplan-source")?.setGeoJson(geoJson)
+    }
+
+    // 2. Fetch PathEdges
+    db.collection("PathEdge").get().addOnSuccessListener { result ->
+        val pathList = mutableListOf<String>()
+        result.forEach { doc ->
+            val points = doc.get("coordinates") as? List<GeoPoint> ?: return@forEach
+            val type = doc.getString("type") ?: ""
+            val name = doc.getString("name") ?: ""
+            val id = doc.getString("id") ?: ""
+            val level = doc.getLong("level")?.toInt() ?: return@forEach
+            val weight = doc.getDouble("weight")?.toFloat() ?: return@forEach
+            val coordString = points.joinToString(",") { "[${it.longitude}, ${it.latitude}, ${level}]" }
+            pathList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level", "weight": "$weight" }, "geometry": {"type": "LineString", "coordinates": [$coordString]}}""")
+        }
+        val geoJson = """{"type": "FeatureCollection", "features": [${pathList.joinToString(",")}]}"""
+        style.getSourceAs<GeoJsonSource>("routing-source")?.setGeoJson(geoJson)
     }
 }

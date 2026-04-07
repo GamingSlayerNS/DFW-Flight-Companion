@@ -595,6 +595,8 @@ fun MapScreen() {
 }
 
 private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLng) {
+    Log.d("FirestoreDB", "Initializing Map Generation")
+
     // 1. Floorplan Sources
     style.addSource(GeoJsonSource("floorplan-source"))
     style.addLayer(FillLayer("building-layer", "floorplan-source").withProperties(
@@ -647,38 +649,39 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     ))
 
     // 5. Adding Markers
-                    val markerBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.restroom)
-                    val safeMarkerBitmap = markerBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                    val scaledMarkerBitmap = Bitmap.createScaledBitmap(safeMarkerBitmap, 200, 200, true)
+    val markerBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.restroom)
+    val safeMarkerBitmap = markerBitmap.copy(Bitmap.Config.ARGB_8888, false)
+    val scaledMarkerBitmap = Bitmap.createScaledBitmap(safeMarkerBitmap, 200, 200, true)
 
-                    if(style.getImage("marker-icon") == null) {
-                        style.addImage("marker-icon", scaledMarkerBitmap)
-                    }
+    if(style.getImage("marker-icon") == null) {
+        style.addImage("marker-icon", scaledMarkerBitmap)
+    }
 
-                    // This adds a single marker
-                    // This will have to be replaced with all of the markers from Firebase and be displayed
-                    val markerPoint = Feature.fromGeometry(Point.fromLngLat(-97.04492, 32.89880)) // Restroom NW
-                    val markerSourceId = "marker-source"
-                    style.addSource(GeoJsonSource(markerSourceId, markerPoint))
+    // This adds a single marker
+    // This will have to be replaced with all of the markers from Firebase and be displayed
+    val markerPoint = Feature.fromGeometry(Point.fromLngLat(-97.04492, 32.89880)) // Restroom NW
+    val markerSourceId = "marker-source"
+    style.addSource(GeoJsonSource(markerSourceId, markerPoint))
 
-                    style.addLayer(
-                        SymbolLayer("marker-layer", markerSourceId).withProperties(
-                            iconImage("marker-icon"),
-                            iconSize(
-                                interpolate(
-                                    exponential(1.5f),    // scaling factor for smooth growth
-                                    zoom(),
-                                    stop(12, 0.4f),
-                                    stop(16, 0.8f),
-                                    stop(20, 1.6f)
-                                )
-                            ),
-                            iconAllowOverlap(false)
-                        )
-                    )
+    style.addLayer(
+        SymbolLayer("marker-layer", markerSourceId).withProperties(
+            iconImage("marker-icon"),
+            iconSize(
+                interpolate(
+                    exponential(1.5f),    // scaling factor for smooth growth
+                    zoom(),
+                    stop(12, 0.4f),
+                    stop(16, 0.8f),
+                    stop(20, 1.6f)
+                )
+            ),
+            iconAllowOverlap(false)
+        )
+    )
 }
 
 private fun fetchDataFromFirestore(style: Style) {
+    Log.d("FirestoreDB", "Initializing map node generation.")
     val db = FirebaseFirestore.getInstance()
 
     // 1. Fetch MapFeatures

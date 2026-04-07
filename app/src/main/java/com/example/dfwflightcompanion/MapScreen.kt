@@ -1,5 +1,6 @@
 package com.example.dfwflightcompanion
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -94,7 +95,7 @@ fun MapScreen() {
             onCreate(null)
             getMapAsync { map ->
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
-                    setupSourcesAndLayers(style, userLocation.value)
+                    setupSourcesAndLayers(context, style, userLocation.value)
                     fetchDataFromFirestore(style)
                     
                     map.moveCamera(
@@ -496,7 +497,7 @@ fun MapScreen() {
     }
 }
 
-private fun setupSourcesAndLayers(style: Style, userLoc: LatLng) {
+private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLng) {
     // 1. Floorplan Sources
     style.addSource(GeoJsonSource("floorplan-source"))
     style.addLayer(FillLayer("building-layer", "floorplan-source").withProperties(

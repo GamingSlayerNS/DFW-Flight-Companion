@@ -1,32 +1,73 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
-
 const {setGlobalOptions} = require("firebase-functions");
-const {onCall} = require("firebase-functions/v2/https");
+const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
+const {initializeApp} = require("firebase-admin/app");
+const {getFirestore} = require("firebase-admin/firestore");
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
+// Initialize Admin SDK to access Firestore
+initializeApp();
+const db = getFirestore();
+
 setGlobalOptions({maxInstances: 10});
-
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
 
 exports.helloWorld = onCall((request) => {
   logger.info("Hello logs!", {structuredData: true});
   return "Hello from Firebase!";
+});
+
+/**
+ * Fetches all amenities from the "Amenity" collection.
+ */
+exports.getAmenities = onCall(async (request) => {
+  try {
+    logger.info("Fetching amenities from Firestore...");
+    const snapshot = await db.collection("Amenity").get();
+
+    const amenities = [];
+    snapshot.forEach(doc => {
+      amenities.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+
+    logger.info(`Successfully fetched ${amenities.length} amenities.`);
+    return amenities;
+  } catch (error) {
+    logger.error("Error fetching amenities:", error);
+    throw new HttpsError(
+      "internal",
+      "Failed to fetch amenities from the database."
+    );
+  }
+});
+
+/**
+ * Fetches the first user profile from the "User" collection.
+ */
+exports.getUserProfile = onCall(async (request) => {
+  try {
+    logger.info("Fetching user profile from Firestore...");
+    const snapshot = await db.collection("User").limit(1).get();
+
+    if (snapshot.empty) {
+      logger.info("No user profiles found.");
+      return null;
+    }
+
+    const doc = snapshot.docs[0];
+    const profile = {
+      id: doc.id,
+      ...doc.data()
+    };
+
+    logger.info(`Successfully fetched profile for user: ${profile.Username || profile.id}`);
+    return profile;
+  } catch (error) {
+    logger.error("Error fetching user profile:", error);
+    throw new HttpsError(
+      "internal",
+      "Failed to fetch user profile from the database."
+    );
+  }
 });

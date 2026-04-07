@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.Orientation
@@ -23,16 +24,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -42,11 +44,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.navigation.NavGraphBuilder
 import kotlin.math.roundToInt
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -288,49 +292,10 @@ fun MapScreen() {
         }
     }
 
-    var showAmenityBox by remember { mutableStateOf(false) } // box for viewing amenity details
+    var showBox by remember { mutableStateOf(false) }
     var offsetY by remember { mutableStateOf(0f) }
     val closeThreshold = with(LocalDensity.current) { 120.dp.toPx() }
 
-    // alert box for updating crowd level
-    var showCrowdLvlBox by remember { mutableStateOf(false) }
-    if (showCrowdLvlBox) {
-        AlertDialog(
-            onDismissRequest = { showCrowdLvlBox = false },
-            title = {
-                Text(
-                    "Current Crowd Level",
-                    modifier = Modifier.padding(top = 12.dp, start = 10.dp)
-                )
-            },
-            text = {
-                Column {
-                    listOf("Low", "Medium", "High").forEach { level ->
-                        Text(
-                            text = level,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    // viewModel.updateCrowdLevel(level)
-                                    showCrowdLvlBox = false
-                                }
-                                .padding(12.dp)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    TextButton(onClick = { showCrowdLvlBox = false }) {
-                        Text("Cancel")
-                    }
-                }
-            }
-        )
-    }
 
     DisposableEffect(Unit) {
         mapView.getMapAsync { map ->
@@ -346,7 +311,7 @@ fun MapScreen() {
                         val destLng = geometry.longitude()
                         val destLat = geometry.latitude()
                         selectedDest = destLng to destLat   // store destination
-                        showAmenityBox = true
+                        showBox = true
                         // startNavigation(destLng, destLat)
                         map.animateCamera(
                             CameraUpdateFactory.newCameraPosition(
@@ -393,7 +358,7 @@ fun MapScreen() {
         )
 
         // Compose UI layer
-        if (showAmenityBox) {
+        if (showBox) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -419,7 +384,7 @@ fun MapScreen() {
                             },
                             onDragStopped = {
                                 if (offsetY > closeThreshold) {
-                                    showAmenityBox = false   // closes the box
+                                    showBox = false   // closes the box
                                 }
                                 offsetY = 0f
                             }
@@ -449,7 +414,7 @@ fun MapScreen() {
                             .size(36.dp)
                             .clip(CircleShape)
                             .background(androidx.compose.ui.graphics.Color.Gray)
-                            .clickable { showAmenityBox = false },
+                            .clickable { showBox = false },
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
@@ -535,7 +500,7 @@ fun MapScreen() {
                         ) {
                             Button(
                                 onClick = {
-                                    showCrowdLvlBox = true
+                                    showBox = false
                                 }
                             ) {
                                 Text("Update Crowd Level")
@@ -543,7 +508,7 @@ fun MapScreen() {
 
                             Button(
                                 onClick = {
-                                    showAmenityBox = false
+                                    showBox = false
                                     selectedDest?.let { (lng, lat) ->
                                         startNavigation(lng, lat)
                                     }

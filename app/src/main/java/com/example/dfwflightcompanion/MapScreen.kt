@@ -51,8 +51,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.roundToInt
 import com.google.firebase.Firebase
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.GeoPoint
 import com.google.firebase.functions.functions
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -71,7 +69,6 @@ import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
-import org.maplibre.geojson.Feature
 import org.maplibre.geojson.Point
 
 enum class Direction {
@@ -107,8 +104,7 @@ fun MapScreen() {
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
                     Log.d("DEBUG", "Before fetch: mapFeatures size = ${mapFeatures.size}")
                     setupSourcesAndLayers(context, style, userLocation.value)
-                    fetchDataFromFirestore(style)
-                    Log.d("DEBUG", "After fetch call: mapFeatures size = ${mapFeatures.size}")
+                    fetchDataFromFunctions(style)
                     
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
@@ -676,11 +672,9 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
                         style.addImage("marker-icon", scaledMarkerBitmap)
                     }
 
-                    // This adds a single marker
-                    // This will have to be replaced with all of the markers from Firebase and be displayed
-                    val markerPoint = Feature.fromGeometry(Point.fromLngLat(-97.04492, 32.89880)) // Restroom NW
+                    // Add Markers pulled from firebase
                     val markerSourceId = "marker-source"
-                    style.addSource(GeoJsonSource(markerSourceId, markerPoint))
+                    style.addSource(GeoJsonSource(markerSourceId))
 
                     style.addLayer(
                         SymbolLayer("marker-layer", markerSourceId).withProperties(
@@ -741,52 +735,71 @@ private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean 
     return intersects
 }
 
-private fun fetchDataFromFirestore(style: Style) {
-    val db = FirebaseFirestore.getInstance()
+private fun fetchDataFromFunctions(style: Style) {
+    val functions = Firebase.functions
+    // ONLY if testing locally:
+    functions.useEmulator("10.0.2.2", 5001)
 
     // 1. Fetch MapFeatures
-    db.collection("MapFeature").get().addOnSuccessListener { result ->
-        val featureList = mutableListOf<String>()
-        mapFeatures.clear()
-        result.forEach { doc ->
-            val points = doc.get("coordinates") as? List<GeoPoint> ?: return@forEach
-            val type = doc.getString("type") ?: ""
-            val name = doc.getString("name") ?: ""
-            val id = doc.getString("id") ?: ""
-            val level = doc.getLong("level")?.toInt() ?: return@forEach
-
-            val latLngList = points.map { LatLng(it.latitude, it.longitude) }
-            mapFeatures.add(
-                MapFeature(
-                    id = id,
-                    name = name,
-                    type = type,
-                    level = level,
-                    coordinates = latLngList
-                )
-            )
-
-            val coordString = points.joinToString(",") { "[${it.longitude}, ${it.latitude}, ${level}]" }
-            featureList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Polygon", "coordinates": [[$coordString]]}}""")
+    functions.getHttpsCallable("getMapFeatures").call()
+        .addOnSuccessListener { result ->
+            @Suppress("UNCHECKED_CAST")
+            val data = result.getData() as? List<Map<String, Any>> ?: return@addOnSuccessListener
+            val featureList = mutableListOf<String>()
+            data.forEach { doc ->
+                @Suppress("UNCHECKED_CAST")
+                val coords = doc["coordinates"] as? List<Map<String, Any>> ?: return@forEach
+                val type = doc["type"] as? String ?: ""
+                val name = doc["name"] as? String ?: ""
+                val id = doc["id"] as? String ?: ""
+                val level = (doc["level"] as? Number)?.toInt() ?: 0
+                val coordString = coords.joinToString(",") { "[${it["longitude"]}, ${it["latitude"]}, $level]" }
+                featureList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Polygon", "coordinates": [[$coordString]]}}""")
+            }
+            val geoJson = """{"type": "FeatureCollection", "features": [${featureList.joinToString(",")}]}"""
+            style.getSourceAs<GeoJsonSource>("floorplan-source")?.setGeoJson(geoJson)
         }
-        val geoJson = """{"type": "FeatureCollection", "features": [${featureList.joinToString(",")}]}"""
-        style.getSourceAs<GeoJsonSource>("floorplan-source")?.setGeoJson(geoJson)
-    }
 
     // 2. Fetch PathEdges
-    db.collection("PathEdge").get().addOnSuccessListener { result ->
-        val pathList = mutableListOf<String>()
-        result.forEach { doc ->
-            val points = doc.get("coordinates") as? List<GeoPoint> ?: return@forEach
-            val type = doc.getString("type") ?: ""
-            val name = doc.getString("name") ?: ""
-            val id = doc.getString("id") ?: ""
-            val level = doc.getLong("level")?.toInt() ?: return@forEach
-            val weight = doc.getDouble("weight")?.toFloat() ?: return@forEach
-            val coordString = points.joinToString(",") { "[${it.longitude}, ${it.latitude}, ${level}]" }
-            pathList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level", "weight": "$weight" }, "geometry": {"type": "LineString", "coordinates": [$coordString]}}""")
+    functions.getHttpsCallable("getPathEdges").call()
+        .addOnSuccessListener { result ->
+            @Suppress("UNCHECKED_CAST")
+            val data = result.getData() as? List<Map<String, Any>> ?: return@addOnSuccessListener
+            val pathList = mutableListOf<String>()
+            data.forEach { doc ->
+                @Suppress("UNCHECKED_CAST")
+                val coords = doc["coordinates"] as? List<Map<String, Any>> ?: return@forEach
+                val type = doc["type"] as? String ?: ""
+                val name = doc["name"] as? String ?: ""
+                val id = doc["id"] as? String ?: ""
+                val level = (doc["level"] as? Number)?.toInt() ?: 0
+                val weight = (doc["weight"] as? Number)?.toFloat() ?: 0f
+                val coordString = coords.joinToString(",") { "[${it["longitude"]}, ${it["latitude"]}, $level]" }
+                pathList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level", "weight": "$weight" }, "geometry": {"type": "LineString", "coordinates": [$coordString]}}""")
+            }
+            val geoJson = """{"type": "FeatureCollection", "features": [${pathList.joinToString(",")}]}"""
+            style.getSourceAs<GeoJsonSource>("routing-source")?.setGeoJson(geoJson)
         }
-        val geoJson = """{"type": "FeatureCollection", "features": [${pathList.joinToString(",")}]}"""
-        style.getSourceAs<GeoJsonSource>("routing-source")?.setGeoJson(geoJson)
-    }
+
+    // 3. Fetch MapNodes
+    functions.getHttpsCallable("getMapNodes").call()
+        .addOnSuccessListener { result ->
+            @Suppress("UNCHECKED_CAST")
+            val data = result.getData() as? List<Map<String, Any>> ?: return@addOnSuccessListener
+            val nodeList = mutableListOf<String>()
+            data.forEach { doc ->
+                @Suppress("UNCHECKED_CAST")
+                val coordMap = doc["coordinates"] as? Map<String, Any> ?: return@forEach
+                val lng = (coordMap["longitude"] as? Number)?.toDouble() ?: return@forEach
+                val lat = (coordMap["latitude"] as? Number)?.toDouble() ?: return@forEach
+                val type = doc["type"] as? String ?: ""
+                val name = doc["name"] as? String ?: ""
+                val id = doc["id"] as? String ?: ""
+                val level = (doc["level"] as? Number)?.toInt() ?: 0
+
+                nodeList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Point", "coordinates": [$lng, $lat]}}""")
+            }
+            val geoJson = """{"type": "FeatureCollection", "features": [${nodeList.joinToString(",")}]}"""
+            style.getSourceAs<GeoJsonSource>("marker-source")?.setGeoJson(geoJson)
+        }
 }

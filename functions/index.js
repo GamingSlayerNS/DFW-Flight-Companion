@@ -71,3 +71,84 @@ exports.getUserProfile = onCall(async (request) => {
     );
   }
 });
+
+/**
+ * Fetches all features from the "MapFeature" collection.
+ */
+exports.getMapFeatures = onCall(async (request) => {
+  try {
+    logger.info("Fetching MapFeatures from Firestore...");
+    const snapshot = await db.collection("MapFeature").get();
+    const features = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      features.push({
+        id: doc.id,
+        ...data,
+        // Convert GeoPoint to simple object if necessary for JSON serialization
+        coordinates: data.coordinates ? data.coordinates.map(p => ({
+          latitude: p.latitude,
+          longitude: p.longitude
+        })) : []
+      });
+    });
+    return features;
+  } catch (error) {
+    logger.error("Error fetching MapFeatures:", error);
+    throw new HttpsError("internal", "Failed to fetch MapFeatures.");
+  }
+});
+
+/**
+ * Fetches all edges from the "PathEdge" collection.
+ */
+exports.getPathEdges = onCall(async (request) => {
+  try {
+    logger.info("Fetching PathEdges from Firestore...");
+    const snapshot = await db.collection("PathEdge").get();
+    const edges = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      edges.push({
+        id: doc.id,
+        ...data,
+        coordinates: data.coordinates ? data.coordinates.map(p => ({
+          latitude: p.latitude,
+          longitude: p.longitude
+        })) : []
+      });
+    });
+    return edges;
+  } catch (error) {
+    logger.error("Error fetching PathEdges:", error);
+    throw new HttpsError("internal", "Failed to fetch PathEdges.");
+  }
+});
+
+/**
+ * Fetches all nodes from the "MapNode" collection.
+ */
+exports.getMapNodes = onCall(async (request) => {
+  try {
+    logger.info("Fetching MapNodes from Firestore...");
+    const snapshot = await db.collection("MapNode").get();
+    const nodes = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      nodes.push({
+        id: doc.id,
+        ...data,
+        // MapNode has a single GeoPoint coordinates field
+        coordinates: data.coordinates ? {
+          latitude: data.coordinates.latitude,
+          longitude: data.coordinates.longitude
+        } : null
+      });
+    });
+    logger.info(`Successfully fetched ${nodes.length} nodes.`);
+    return nodes;
+  } catch (error) {
+    logger.error("Error fetching MapNodes:", error);
+    throw new HttpsError("internal", "Failed to fetch MapNodes.");
+  }
+});

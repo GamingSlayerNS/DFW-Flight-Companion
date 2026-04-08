@@ -73,12 +73,6 @@ import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.Point
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
 
 enum class Direction {
     UP, DOWN, LEFT, RIGHT
@@ -111,8 +105,10 @@ fun MapScreen() {
             getMapAsync { map ->
                 mapRef.value = map
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
+                    Log.d("DEBUG", "Before fetch: mapFeatures size = ${mapFeatures.size}")
                     setupSourcesAndLayers(context, style, userLocation.value)
                     fetchDataFromFirestore(style)
+                    Log.d("DEBUG", "After fetch call: mapFeatures size = ${mapFeatures.size}")
                     
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
@@ -275,7 +271,7 @@ fun MapScreen() {
                     if (geometry is Point) {
                         val destLng = geometry.longitude()
                         val destLat = geometry.latitude()
-                    currentDestination = Pair(destLng, destLat)
+                        currentDestination = Pair(destLng, destLat)
                         selectedDest = destLng to destLat   // store destination
                         showAmenityBox = true
                         // startNavigation(destLng, destLat)
@@ -422,6 +418,10 @@ fun MapScreen() {
 
         // Compose UI layer
         if (showAmenityBox) {
+            val selectedFeature = remember(selectedDest, mapFeatures) {
+                findFeatureForSelectedDest(selectedDest, mapFeatures)
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -495,7 +495,7 @@ fun MapScreen() {
                         verticalArrangement = Arrangement.Top
                     ) {
                         Text(
-                            text = "Women's Restroom",
+                            text = mapFeatures.firstOrNull()?.name ?: "No amenities loaded",
                             color = androidx.compose.ui.graphics.Color.Black,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -699,18 +699,73 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
                     )
 }
 
+private val mapFeatures = mutableStateListOf<MapFeature>()
+
+data class MapFeature(
+    val id: String,
+    val name: String,
+    val type: String,
+    val level: Int,
+    val coordinates: List<LatLng>
+)
+
+private fun findFeatureForSelectedDest(selectedDest: Pair<Double, Double>?, mapFeatures: List<MapFeature>): MapFeature? {
+    if (selectedDest == null) return null
+    val (lng, lat) = selectedDest
+    val point = LatLng(lat, lng)
+
+    return mapFeatures.firstOrNull { feature ->
+        isPointInsidePolygon(point, feature.coordinates)
+    }
+}
+
+private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean {
+    var intersects = false
+    val x = point.longitude
+    val y = point.latitude
+
+    for (i in polygon.indices) {
+        val j = (i + 1) % polygon.size
+
+        val xi = polygon[i].longitude
+        val yi = polygon[i].latitude
+        val xj = polygon[j].longitude
+        val yj = polygon[j].latitude
+
+        val intersectsEdge = ((yi > y) != (yj > y)) &&
+                (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
+
+        if (intersectsEdge) intersects = !intersects
+    }
+
+    return intersects
+}
+
 private fun fetchDataFromFirestore(style: Style) {
     val db = FirebaseFirestore.getInstance()
 
     // 1. Fetch MapFeatures
     db.collection("MapFeature").get().addOnSuccessListener { result ->
         val featureList = mutableListOf<String>()
+        mapFeatures.clear()
         result.forEach { doc ->
             val points = doc.get("coordinates") as? List<GeoPoint> ?: return@forEach
             val type = doc.getString("type") ?: ""
             val name = doc.getString("name") ?: ""
             val id = doc.getString("id") ?: ""
             val level = doc.getLong("level")?.toInt() ?: return@forEach
+
+            val latLngList = points.map { LatLng(it.latitude, it.longitude) }
+            mapFeatures.add(
+                MapFeature(
+                    id = id,
+                    name = name,
+                    type = type,
+                    level = level,
+                    coordinates = latLngList
+                )
+            )
+
             val coordString = points.joinToString(",") { "[${it.longitude}, ${it.latitude}, ${level}]" }
             featureList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Polygon", "coordinates": [[$coordString]]}}""")
         }

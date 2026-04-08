@@ -87,6 +87,7 @@ fun MapScreen() {
     var currentDestination by remember {
         mutableStateOf<Pair<Double, Double>?>(null)
     }
+    var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     val graph = remember{
         GraphBuilder.fromGeoJson(context)
@@ -139,8 +140,6 @@ fun MapScreen() {
             Log.e("FirebaseFunctions", "Failed to initialize functions", e)
         }
     }
-
-    var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     fun computeRoute(userLng: Double, userLat: Double, destLng: Double, destLat: Double): List<Node>? {
         // Find nearest nodes for start location
@@ -268,7 +267,7 @@ fun MapScreen() {
                         val destLng = geometry.longitude()
                         val destLat = geometry.latitude()
                         currentDestination = Pair(destLng, destLat)
-                        selectedDest = destLng to destLat   // store destination
+                        selectedDest = Pair(destLng, destLat)   // store destination
                         showAmenityBox = true
                         // startNavigation(destLng, destLat)
                         map.animateCamera(
@@ -491,7 +490,7 @@ fun MapScreen() {
                         verticalArrangement = Arrangement.Top
                     ) {
                         Text(
-                            text = mapFeatures.firstOrNull()?.name ?: "No amenities loaded",
+                            text = selectedFeature?.name ?: "Unknown",
                             color = androidx.compose.ui.graphics.Color.Black,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -693,8 +692,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
                     )
 }
 
-private val mapFeatures = mutableStateListOf<MapFeature>()
-
+private val mapFeatures = mutableStateListOf<MapFeature>() // list used for fetching map feature data from db
 data class MapFeature(
     val id: String,
     val name: String,
@@ -702,7 +700,6 @@ data class MapFeature(
     val level: Int,
     val coordinates: List<LatLng>
 )
-
 private fun findFeatureForSelectedDest(selectedDest: Pair<Double, Double>?, mapFeatures: List<MapFeature>): MapFeature? {
     if (selectedDest == null) return null
     val (lng, lat) = selectedDest
@@ -712,7 +709,6 @@ private fun findFeatureForSelectedDest(selectedDest: Pair<Double, Double>?, mapF
         isPointInsidePolygon(point, feature.coordinates)
     }
 }
-
 private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean {
     var intersects = false
     val x = point.longitude
@@ -753,6 +749,23 @@ private fun fetchDataFromFunctions(style: Style) {
                 val name = doc["name"] as? String ?: ""
                 val id = doc["id"] as? String ?: ""
                 val level = (doc["level"] as? Number)?.toInt() ?: 0
+
+                val latLngs = coords.map {
+                    LatLng(
+                        it["latitude"] as Double,
+                        it["longitude"] as Double
+                    )
+                }
+                mapFeatures.add(
+                    MapFeature(
+                        id = id,
+                        name = name,
+                        type = type,
+                        level = level,
+                        coordinates = latLngs
+                    )
+                )
+
                 val coordString = coords.joinToString(",") { "[${it["longitude"]}, ${it["latitude"]}, $level]" }
                 featureList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Polygon", "coordinates": [[$coordString]]}}""")
             }

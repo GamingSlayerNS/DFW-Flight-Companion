@@ -595,7 +595,7 @@ fun MapScreen() {
 }
 
 private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLng) {
-    Log.d("FirestoreDB", "Initializing Map Generation")
+    Log.d("FirestoreDB", "MapScreen Initializing Map Generation")
 
     // 1. Floorplan Sources
     style.addSource(GeoJsonSource("floorplan-source"))
@@ -681,7 +681,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
 }
 
 private fun fetchDataFromFirestore(style: Style) {
-    Log.d("FirestoreDB", "Initializing map node generation.")
+    Log.d("FirestoreDB", "MapScreen Initializing map node generation.")
     val db = FirebaseFirestore.getInstance()
 
     // 1. Fetch MapFeatures

@@ -14,6 +14,14 @@ module.exports = {
     "no-restricted-globals": ["error", "name", "length"],
     "prefer-arrow-callback": "error",
     "quotes": ["error", "double", {"allowTemplateLiterals": true}],
+    "linebreak-style": "off",
+    "indent": "off",
+    "max-len": "off",
+    "comma-dangle": "off",
+    "arrow-parens": "off",
+    "object-curly-spacing": "off",
+    "require-jsdoc": "off",
+    "valid-jsdoc": "off",
   },
   overrides: [
     {

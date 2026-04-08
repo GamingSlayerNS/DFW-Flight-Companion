@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
     private fun wipeAndSeedFirestore(db: FirebaseFirestore, onComplete: () -> Unit) {
         val collections = listOf(
             "Terminal", "MapNode", "PathEdge", "Amenity", 
-            "AmenityUnit", "AmenitySchedule", "Sensor", "User", "UserReports", "MapFeature"
+            "AmenityUnit", "AmenitySchedule", "Sensor", "User", "UserReports", "MapBackground"
         )
 
         var collectionsProcessed = 0
@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // 3. Parse floorplan.geojson for MapFeatures (Polygons)
+            // 3. Parse floorplan.geojson for MapBackgrounds (Polygons)
             val floorplanJson = assets.open("floorplan.geojson").bufferedReader().use { it.readText() }
             val floorplanObj = JSONObject(floorplanJson)
             val floorplanFeatures = floorplanObj.getJSONArray("features")
@@ -173,7 +173,7 @@ class MainActivity : ComponentActivity() {
                         points.add(GeoPoint(pt.getDouble(1), pt.getDouble(0)))
                     }
                     
-                    db.collection("MapFeature").add(hashMapOf(
+                    db.collection("MapBackground").add(hashMapOf(
                         "id" to props.optString("id"),
                         "type" to props.optString("type"),
                         "name" to props.optString("name"),

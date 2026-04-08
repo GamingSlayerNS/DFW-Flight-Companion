@@ -68,16 +68,16 @@ exports.getUserProfile = onCall(async (request) => {
 });
 
 /**
- * Fetches all features from the "MapFeature" collection.
+ * Fetches all features from the "MapBackground" collection.
  */
-exports.getMapFeatures = onCall(async (request) => {
+exports.getMapBackgrounds = onCall(async (request) => {
   try {
-    logger.info("Fetching MapFeatures from Firestore...");
-    const snapshot = await db.collection("MapFeature").get();
-    const features = [];
+    logger.info("Fetching MapBackgrounds from Firestore...");
+    const snapshot = await db.collection("MapBackground").get();
+    const backgrounds = [];
     snapshot.forEach(doc => {
       const data = doc.data();
-      features.push({
+      backgrounds.push({
         id: doc.id,
         ...data,
         // Convert GeoPoint to simple object if necessary for JSON serialization
@@ -87,10 +87,10 @@ exports.getMapFeatures = onCall(async (request) => {
         })) : []
       });
     });
-    return features;
+    return backgrounds;
   } catch (error) {
-    logger.error("Error fetching MapFeatures:", error);
-    throw new HttpsError("internal", "Failed to fetch MapFeatures.");
+    logger.error("Error fetching MapBackgrounds:", error);
+    throw new HttpsError("internal", "Failed to fetch MapBackgrounds.");
   }
 });
 

@@ -103,7 +103,7 @@ fun MapScreen() {
             getMapAsync { map ->
                 mapRef.value = map
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
-                    Log.d("DEBUG", "Before fetch: mapFeatures size = ${mapFeatures.size}")
+                    Log.d("DEBUG", "Before fetch: mapBackgrounds size = ${mapBackgrounds.size}")
                     setupSourcesAndLayers(context, style, userLocation.value)
                     fetchDataFromFunctions(style)
                     
@@ -394,8 +394,8 @@ fun MapScreen() {
 
         // Compose UI layer
         if (showAmenityBox) {
-            val selectedFeature = remember(selectedDest, mapFeatures) {
-                findFeatureForSelectedDest(selectedDest, mapFeatures)
+            val selectedBackground = remember(selectedDest, mapBackgrounds) {
+                findBackgroundForSelectedDest(selectedDest, mapBackgrounds)
             }
 
             Box(
@@ -471,7 +471,7 @@ fun MapScreen() {
                         verticalArrangement = Arrangement.Top
                     ) {
                         Text(
-                            text = selectedFeature?.name ?: "Unknown",
+                            text = selectedBackground?.name ?: "Unknown",
                             color = androidx.compose.ui.graphics.Color.Black,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -675,21 +675,21 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     )
 }
 
-private val mapFeatures = mutableStateListOf<MapFeature>() // list used for fetching map feature data from db
-data class MapFeature(
+private val mapBackgrounds = mutableStateListOf<MapBackground>() // list used for fetching map background data from db
+data class MapBackground(
     val id: String,
     val name: String,
     val type: String,
     val level: Int,
     val coordinates: List<LatLng>
 )
-private fun findFeatureForSelectedDest(selectedDest: Pair<Double, Double>?, mapFeatures: List<MapFeature>): MapFeature? {
+private fun findBackgroundForSelectedDest(selectedDest: Pair<Double, Double>?, mapBackgrounds: List<MapBackground>): MapBackground? {
     if (selectedDest == null) return null
     val (lng, lat) = selectedDest
     val point = LatLng(lat, lng)
 
-    return mapFeatures.firstOrNull { feature ->
-        isPointInsidePolygon(point, feature.coordinates)
+    return mapBackgrounds.firstOrNull { background ->
+        isPointInsidePolygon(point, background.coordinates)
     }
 }
 private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean {
@@ -720,8 +720,8 @@ private fun fetchDataFromFunctions(style: Style) {
     // ONLY if testing locally:
     functions.useEmulator("10.0.2.2", 5001)
 
-    // 1. Fetch MapFeatures
-    functions.getHttpsCallable("getMapFeatures").call()
+    // 1. Fetch MapBackgrounds
+    functions.getHttpsCallable("getMapBackgrounds").call()
         .addOnSuccessListener { result ->
             @Suppress("UNCHECKED_CAST")
             val data = result.getData() as? List<Map<String, Any>> ?: return@addOnSuccessListener
@@ -740,8 +740,8 @@ private fun fetchDataFromFunctions(style: Style) {
                         it["longitude"] as Double
                     )
                 }
-                mapFeatures.add(
-                    MapFeature(
+                mapBackgrounds.add(
+                    MapBackground(
                         id = id,
                         name = name,
                         type = type,

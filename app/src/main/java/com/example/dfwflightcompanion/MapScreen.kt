@@ -25,13 +25,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,6 +95,7 @@ fun MapScreen() {
     
     // User's current location (Simulation)
     val userLocation = remember { mutableStateOf(LatLng(32.8993, -97.0446)) }
+    val initialCameraPosition = remember { LatLng(32.8974, -97.0446) }
     var currentDestination by remember {
         mutableStateOf<Pair<Double, Double>?>(null)
     }
@@ -116,13 +118,14 @@ fun MapScreen() {
             getMapAsync { map ->
                 mapRef.value = map
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
+                    Log.d("DEBUG", "Before fetch: mapBackgrounds size = ${mapBackgrounds.size}")
                     setupSourcesAndLayers(context, style, userLocation.value)
                     fetchDataFromFunctions(style, amenities)
                     
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
                             CameraPosition.Builder()
-                                .target(LatLng(32.8974, -97.0446))
+                                .target(initialCameraPosition)
                                 .zoom(16.0)
                                 .build()
                         )
@@ -199,6 +202,29 @@ fun MapScreen() {
         )
     }
 
+    // Function to cancel navigation
+    val cancelNavigation = {
+        isNavigating = false
+        currentDestination = null
+        mapRef.value?.let { map ->
+            map.style?.let { style ->
+                // Clear the route by providing a valid empty FeatureCollection
+                style.getSourceAs<GeoJsonSource>("route-source")?.setGeoJson("""{"type": "FeatureCollection", "features": []}""")
+            }
+            // Reset camera to normal
+            map.animateCamera(
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.Builder()
+                        .target(initialCameraPosition)
+                        .zoom(16.0)
+                        .bearing(0.0)
+                        .tilt(0.0)
+                        .build()
+                ), 2000
+            )
+        }
+    }
+
     var showAmenityBox by remember { mutableStateOf(false) } // box for viewing amenity details
     var offsetY by remember { mutableStateOf(0f) }
     val closeThreshold = with(LocalDensity.current) { 120.dp.toPx() }
@@ -215,6 +241,7 @@ fun MapScreen() {
                 )
             },
             text = {
+                @Suppress("ControlFlowWithEmptyBody")
                 Column {
                     listOf("Low", "Medium", "High").forEach { level ->
                         Text(
@@ -409,6 +436,10 @@ fun MapScreen() {
 
         // Compose UI layer
         if (showAmenityBox) {
+            val selectedBackground = remember(selectedDest, mapBackgrounds) {
+                findBackgroundForSelectedDest(selectedDest, mapBackgrounds)
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -578,6 +609,27 @@ fun MapScreen() {
             }
         }
 
+        // Stop Navigation Button
+        if (isNavigating) {
+            Button(
+                onClick = { cancelNavigation() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = androidx.compose.ui.graphics.Color.Red,
+                    contentColor = androidx.compose.ui.graphics.Color.White
+                ),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp)
+                    .clip(RoundedCornerShape(24.dp))
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Close, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Stop Navigation", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
         Column {
             Button(onClick = { moveUser(Direction.UP) }, modifier = Modifier.padding(start = 35.dp)) {
                 Text("N")
@@ -640,7 +692,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     // 3. Active Navigation Route Source
     style.addSource(GeoJsonSource("route-source"))
     style.addLayer(LineLayer("route-layer", "route-source").withProperties(
-        PropertyFactory.lineColor(Color.BLUE),
+        PropertyFactory.lineColor(color(Color.BLUE)),
         PropertyFactory.lineWidth(5f),
         PropertyFactory.lineCap("round"),
         PropertyFactory.lineJoin("round")
@@ -805,7 +857,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                 val id = doc["id"] as? String ?: ""
                 val level = (doc["level"] as? Number)?.toInt() ?: 0
 
-                nodeList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Point", "coordinates": [$lng, $lat]}}""")
+                nodeList.add("""{"type": "Feature", "id": "$id", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Point", "coordinates": [$lng, $lat]}}""")
             }
             val geoJson = """{"type": "FeatureCollection", "features": [${nodeList.joinToString(",")}]}"""
             style.getSourceAs<GeoJsonSource>("marker-source")?.setGeoJson(geoJson)

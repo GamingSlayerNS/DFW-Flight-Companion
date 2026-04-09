@@ -654,9 +654,9 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
         style.addImage("marker-icon", scaledMarkerBitmap)
     }
 
-                    // Add Markers pulled from firebase
-                    val markerSourceId = "marker-source"
-                    style.addSource(GeoJsonSource(markerSourceId))
+    // Add Markers pulled from firebase
+    val markerSourceId = "marker-source"
+    style.addSource(GeoJsonSource(markerSourceId))
 
     style.addLayer(
         SymbolLayer("marker-layer", markerSourceId).withProperties(
@@ -793,8 +793,9 @@ private fun fetchDataFromFunctions(style: Style) {
                 val name = doc["name"] as? String ?: ""
                 val id = doc["id"] as? String ?: ""
                 val level = (doc["level"] as? Number)?.toInt() ?: 0
-
-                nodeList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Point", "coordinates": [$lng, $lat]}}""")
+                if (id != "poi_entrance" && id != "poi_exit") {
+                    nodeList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Point", "coordinates": [$lng, $lat]}}""")
+                }
             }
             val geoJson = """{"type": "FeatureCollection", "features": [${nodeList.joinToString(",")}]}"""
             style.getSourceAs<GeoJsonSource>("marker-source")?.setGeoJson(geoJson)

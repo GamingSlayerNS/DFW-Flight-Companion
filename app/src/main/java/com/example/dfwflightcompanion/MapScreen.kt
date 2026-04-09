@@ -120,7 +120,7 @@ fun MapScreen() {
         }
     }
 
-    var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+//    var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     fun computeRoute(userLng: Double, userLat: Double, destLng: Double, destLat: Double): List<Node>? {
         // Find nearest nodes for start location

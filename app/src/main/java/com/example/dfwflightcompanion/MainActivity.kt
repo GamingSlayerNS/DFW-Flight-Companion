@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
 
                 // SET TO TRUE TO WIPE AND RE-POPULATE FROM GEOJSON, THEN SET FALSE
                 val shouldInitializeDb = false
-                // SET TO TRUE TO POPULATE RESTROOMS, THEN SET FALSE
+                // SET TO TRUE TO WIPE AND RE-POPULATE RESTROOMS, THEN SET FALSE
                 val shouldInitializeRestrooms = false
 
                 LaunchedEffect(Unit) {
@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (shouldInitializeRestrooms) {
-                        statusMessage = "Populating Restrooms..."
+                        statusMessage = "Wiping and Populating Restrooms..."
                         populateRestrooms(db) {
                             statusMessage = "Restroom Population Complete!"
                         }
@@ -52,27 +52,41 @@ class MainActivity : ComponentActivity() {
 
     private fun populateRestrooms(db: FirebaseFirestore, onComplete: () -> Unit) {
         Log.d("FirestoreDB", "Populating 15 sets of restrooms...")
-        val batch = db.batch()
         
-        RestroomData.restroomSets.forEach { restroom ->
-            val docRef = db.collection("Amenity").document(restroom.id)
-            batch.set(docRef, hashMapOf(
-                "AmenityID" to restroom.id,
-                "Name" to restroom.name,
-                "AmenityType" to "Restroom",
-                "SubTypeName" to restroom.type,
-                "IsAccessible" to restroom.isAccessible,
-                "NodeID" to restroom.nodeId
-            ))
-        }
+        // 1. First, delete all existing amenities to avoid duplicates
+        db.collection("Amenity").get().addOnSuccessListener { result ->
+            val batch = db.batch()
+            result.forEach { batch.delete(it.reference) }
+            
+            batch.commit().addOnSuccessListener {
+                Log.d("FirestoreDB", "Wiped old amenities. Adding new ones...")
+                
+                // 2. Add the new restrooms from RestroomData
+                val addBatch = db.batch()
+                RestroomData.restroomSets.forEach { restroom ->
+                    val docRef = db.collection("Amenity").document(restroom.id)
+                    addBatch.set(docRef, hashMapOf(
+                        "AmenityID" to restroom.id,
+                        "Name" to restroom.name,
+                        "AmenityType" to "Restroom",
+                        "SubTypeName" to restroom.type,
+                        "IsAccessible" to restroom.isAccessible,
+                        "NodeID" to restroom.nodeId
+                    ))
+                }
 
-        batch.commit().addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                Log.d("FirestoreDB", "Successfully added 45 restrooms.")
-            } else {
-                Log.e("FirestoreDB", "Failed to add restrooms", task.exception)
+                addBatch.commit().addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        Log.d("FirestoreDB", "Successfully added 45 restrooms.")
+                    } else {
+                        Log.e("FirestoreDB", "Failed to add restrooms", task.exception)
+                    }
+                    onComplete()
+                }
+            }.addOnFailureListener { e ->
+                Log.e("FirestoreDB", "Failed to wipe amenities", e)
+                onComplete()
             }
-            onComplete()
         }
     }
 

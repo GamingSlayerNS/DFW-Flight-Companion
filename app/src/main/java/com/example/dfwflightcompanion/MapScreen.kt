@@ -4,39 +4,41 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
-import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.FirstBaseline
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
@@ -49,7 +51,6 @@ import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlin.math.roundToInt
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
 import org.maplibre.android.MapLibre
@@ -70,10 +71,21 @@ import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Point
+import kotlin.math.roundToInt
 
 enum class Direction {
     UP, DOWN, LEFT, RIGHT
 }
+
+data class AmenityDetail(
+    val id: String = "",
+    val name: String = "",
+    val type: String = "",
+    val subType: String = "",
+    val congestion: String = "",
+    val isAccessible: Boolean = true,
+    val nodeId: String = ""
+)
 
 @Composable
 fun MapScreen() {
@@ -84,10 +96,14 @@ fun MapScreen() {
     
     // User's current location (Simulation)
     val userLocation = remember { mutableStateOf(LatLng(32.8993, -97.0446)) }
+    val initialCameraPosition = remember { LatLng(32.8974, -97.0446) }
     var currentDestination by remember {
         mutableStateOf<Pair<Double, Double>?>(null)
     }
     var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+
+    val amenities = remember { mutableStateListOf<AmenityDetail>() }
+    var selectedAmenity by remember { mutableStateOf<AmenityDetail?>(null) }
 
     val graph = remember{
         GraphBuilder.fromGeoJson(context)
@@ -105,12 +121,12 @@ fun MapScreen() {
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
                     Log.d("DEBUG", "Before fetch: mapBackgrounds size = ${mapBackgrounds.size}")
                     setupSourcesAndLayers(context, style, userLocation.value)
-                    fetchDataFromFunctions(style)
+                    fetchDataFromFunctions(style, amenities)
                     
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
                             CameraPosition.Builder()
-                                .target(LatLng(32.8974, -97.0446))
+                                .target(initialCameraPosition)
                                 .zoom(16.0)
                                 .build()
                         )
@@ -119,8 +135,6 @@ fun MapScreen() {
             }
         }
     }
-
-//    var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     fun computeRoute(userLng: Double, userLat: Double, destLng: Double, destLat: Double): List<Node>? {
         // Find nearest nodes for start location
@@ -189,6 +203,29 @@ fun MapScreen() {
         )
     }
 
+    // Function to cancel navigation
+    val cancelNavigation = {
+        isNavigating = false
+        currentDestination = null
+        mapRef.value?.let { map ->
+            map.style?.let { style ->
+                // Clear the route by providing a valid empty FeatureCollection
+                style.getSourceAs<GeoJsonSource>("route-source")?.setGeoJson("""{"type": "FeatureCollection", "features": []}""")
+            }
+            // Reset camera to normal
+            map.animateCamera(
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.Builder()
+                        .target(initialCameraPosition)
+                        .zoom(16.0)
+                        .bearing(0.0)
+                        .tilt(0.0)
+                        .build()
+                ), 2000
+            )
+        }
+    }
+
     var showAmenityBox by remember { mutableStateOf(false) } // box for viewing amenity details
     var offsetY by remember { mutableStateOf(0f) }
     val closeThreshold = with(LocalDensity.current) { 120.dp.toPx() }
@@ -205,6 +242,7 @@ fun MapScreen() {
                 )
             },
             text = {
+                @Suppress("ControlFlowWithEmptyBody")
                 Column {
                     listOf("Low", "Medium", "High").forEach { level ->
                         Text(
@@ -212,7 +250,27 @@ fun MapScreen() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    // viewModel.updateCrowdLevel(level)
+                                    selectedAmenity?.let { amenity ->
+                                        val functions = Firebase.functions
+                                        val data = hashMapOf(
+                                            "amenityId" to amenity.id,
+                                            "congestion" to level
+                                        )
+                                        functions.getHttpsCallable("updateAmenityCongestion").call(data)
+                                            .addOnSuccessListener {
+                                                Log.d("FirestoreDB", "Amenity congestion updated successfully to $level")
+                                                // Update local state
+                                                val index = amenities.indexOfFirst { it.id == amenity.id }
+                                                if (index != -1) {
+                                                    val updated = amenities[index].copy(congestion = level)
+                                                    amenities[index] = updated
+                                                    selectedAmenity = updated
+                                                }
+                                            }
+                                            .addOnFailureListener { e ->
+                                                Log.e("FirestoreDB", "Error updating amenity congestion", e)
+                                            }
+                                    }
                                     showCrowdLvlBox = false
                                 }
                                 .padding(12.dp)
@@ -242,6 +300,11 @@ fun MapScreen() {
 
                 if (features.isNotEmpty()) {
                     val clickedFeature = features[0]
+                    val nodeId = clickedFeature.getStringProperty("id")
+
+                    // Find the amenity linked to this NodeID
+                    selectedAmenity = amenities.find { it.nodeId == nodeId }
+
                     val geometry = clickedFeature.geometry()
 
                     if (geometry is Point) {
@@ -471,7 +534,7 @@ fun MapScreen() {
                         verticalArrangement = Arrangement.Top
                     ) {
                         Text(
-                            text = selectedBackground?.name ?: "Unknown",
+                            text = selectedAmenity?.name ?: selectedBackground?.name ?: "Unknown",
                             color = androidx.compose.ui.graphics.Color.Black,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -513,7 +576,7 @@ fun MapScreen() {
                                 modifier = Modifier.alignBy(FirstBaseline)
                             )
                             Text(
-                                text = "Low",
+                                text = selectedAmenity?.congestion ?: "Low",
                                 color = androidx.compose.ui.graphics.Color(0xFF00C853),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -563,6 +626,27 @@ fun MapScreen() {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Stop Navigation Button
+        if (isNavigating) {
+            Button(
+                onClick = { cancelNavigation() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = androidx.compose.ui.graphics.Color.Red,
+                    contentColor = androidx.compose.ui.graphics.Color.White
+                ),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp)
+                    .clip(RoundedCornerShape(24.dp))
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Close, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Stop Navigation", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -629,7 +713,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     // 3. Active Navigation Route Source
     style.addSource(GeoJsonSource("route-source"))
     style.addLayer(LineLayer("route-layer", "route-source").withProperties(
-        PropertyFactory.lineColor(Color.BLUE),
+        PropertyFactory.lineColor(color(Color.BLUE)),
         PropertyFactory.lineWidth(5f),
         PropertyFactory.lineCap("round"),
         PropertyFactory.lineJoin("round")
@@ -714,7 +798,7 @@ private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean 
     return intersects
 }
 
-private fun fetchDataFromFunctions(style: Style) {
+private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityDetail>) {
     Log.d("FirestoreDB", "MapScreen Initializing map node generation.")
     val functions = Firebase.functions
     // ONLY if testing locally:
@@ -799,5 +883,24 @@ private fun fetchDataFromFunctions(style: Style) {
             }
             val geoJson = """{"type": "FeatureCollection", "features": [${nodeList.joinToString(",")}]}"""
             style.getSourceAs<GeoJsonSource>("marker-source")?.setGeoJson(geoJson)
+        }
+
+    // 4. Fetch Amenities
+    functions.getHttpsCallable("getAmenities").call()
+        .addOnSuccessListener { result ->
+            @Suppress("UNCHECKED_CAST")
+            val data = result.getData() as? List<Map<String, Any>> ?: return@addOnSuccessListener
+            amenities.clear()
+            data.forEach { map ->
+                amenities.add(AmenityDetail(
+                    id = map["id"] as? String ?: "",
+                    name = map["Name"] as? String ?: "Unknown",
+                    type = map["AmenityType"] as? String ?: "",
+                    subType = map["SubTypeName"] as? String ?: "",
+                    congestion = map["Congestion"] as? String ?: "Low",
+                    isAccessible = map["IsAccessible"] as? Boolean ?: false,
+                    nodeId = map["NodeID"] as? String ?: ""
+                ))
+            }
         }
 }

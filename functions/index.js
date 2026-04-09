@@ -38,6 +38,28 @@ exports.getAmenities = onCall(async (request) => {
 });
 
 /**
+ * Updates the congestion level of an amenity.
+ */
+exports.updateAmenityCongestion = onCall(async (request) => {
+  const { amenityId, congestion } = request.data;
+
+  if (!amenityId || !congestion) {
+    throw new HttpsError("invalid-argument", "amenityId and congestion are required.");
+  }
+
+  try {
+    logger.info(`Updating amenity ${amenityId} congestion to ${congestion}`);
+    await db.collection("Amenity").doc(amenityId).update({
+      Congestion: congestion
+    });
+    return { success: true };
+  } catch (error) {
+    logger.error("Error updating amenity congestion:", error);
+    throw new HttpsError("internal", "Failed to update amenity congestion.");
+  }
+});
+
+/**
  * Fetches the first user profile from the "User" collection.
  */
 exports.getUserProfile = onCall(async (request) => {

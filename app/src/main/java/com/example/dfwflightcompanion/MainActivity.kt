@@ -33,12 +33,18 @@ class MainActivity : ComponentActivity() {
                     if (shouldInitializeDb) {
                         statusMessage = "Wiping and Initializing from GeoJSON..."
                         wipeAndSeedFirestore(db) {
-                            statusMessage = "Database Population Complete!"
+                            Log.d("FirestoreDB", "GeoJSON Seed Finished")
+                            if (shouldInitializeRestrooms) {
+                                statusMessage = "Populating Restrooms..."
+                                populateRestrooms(db) {
+                                    statusMessage = "Full Initialization Complete!"
+                                }
+                            } else {
+                                statusMessage = "Database Population Complete!"
+                            }
                         }
-                    }
-
-                    if (shouldInitializeRestrooms) {
-                        statusMessage = "Wiping and Populating Restrooms..."
+                    } else if (shouldInitializeRestrooms) {
+                        statusMessage = "Populating Restrooms..."
                         populateRestrooms(db) {
                             statusMessage = "Restroom Population Complete!"
                         }
@@ -51,7 +57,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun populateRestrooms(db: FirebaseFirestore, onComplete: () -> Unit) {
-        Log.d("FirestoreDB", "Populating 15 sets of restrooms...")
+        Log.d("FirestoreDB", "Populating restrooms...")
         
         // 1. First, delete all existing amenities to avoid duplicates
         db.collection("Amenity").get().addOnSuccessListener { result ->
@@ -63,24 +69,31 @@ class MainActivity : ComponentActivity() {
                 
                 // 2. Add the new restrooms from RestroomData
                 val addBatch = db.batch()
-                RestroomData.restroomSets.forEach { restroom ->
-                    val docRef = db.collection("Amenity").document(restroom.id)
-                    addBatch.set(docRef, hashMapOf(
-                        "AmenityID" to restroom.id,
-                        "Name" to restroom.name,
-                        "AmenityType" to "Restroom",
-                        "SubTypeName" to restroom.type,
-                        "IsAccessible" to restroom.isAccessible,
-                        "NodeID" to restroom.nodeId
-                    ))
-                }
-
-                addBatch.commit().addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d("FirestoreDB", "Successfully added 45 restrooms.")
-                    } else {
-                        Log.e("FirestoreDB", "Failed to add restrooms", task.exception)
+                try {
+                    val sets = RestroomData.restroomSets
+                    sets.forEach { restroom ->
+                        val docRef = db.collection("Amenity").document(restroom.id)
+                        addBatch.set(docRef, hashMapOf(
+                            "AmenityID" to restroom.id,
+                            "Name" to restroom.name,
+                            "AmenityType" to "Restroom",
+                            "SubTypeName" to restroom.type,
+                            "Congestion" to restroom.congestion,
+                            "IsAccessible" to restroom.isAccessible,
+                            "NodeID" to restroom.nodeId
+                        ))
                     }
+
+                    addBatch.commit().addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            Log.d("FirestoreDB", "Successfully added restrooms.")
+                        } else {
+                            Log.e("FirestoreDB", "Failed to add restrooms", task.exception)
+                        }
+                        onComplete()
+                    }
+                } catch (e: Exception) {
+                    Log.e("FirestoreDB", "Error during restroom population", e)
                     onComplete()
                 }
             }.addOnFailureListener { e ->
@@ -144,6 +157,7 @@ class MainActivity : ComponentActivity() {
                     val coords = geom.getJSONArray("coordinates")
                     db.collection("MapNode").add(hashMapOf(
                         "id" to props.optString("id"),
+                        "terminalId" to "Terminal D",
                         "type" to "poi",
                         "name" to props.optString("name"),
                         "level" to props.optInt("level"),
@@ -161,9 +175,9 @@ class MainActivity : ComponentActivity() {
                         "id" to props.optString("id"),
                         "type" to "path",
                         "name" to props.optString("name"),
-                        "level" to props.optInt("level"),
                         "weight" to props.optDouble("weight"),
-                        "coordinates" to pathPoints
+                        "coordinates" to pathPoints,
+                        "isOpen" to true
                     ))
                 }
             }
@@ -204,7 +218,6 @@ class MainActivity : ComponentActivity() {
                 "StatusID" to "S1",
                 "AmenityID" to "A1",
                 "SensorID" to "SN1",
-                "Congestion" to "Low",
                 "UnitStatus" to "Open",
                 "LastUpdated" to System.currentTimeMillis()
             ))

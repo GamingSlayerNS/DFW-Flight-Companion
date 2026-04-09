@@ -144,6 +144,7 @@ class MainActivity : ComponentActivity() {
                     val coords = geom.getJSONArray("coordinates")
                     db.collection("MapNode").add(hashMapOf(
                         "id" to props.optString("id"),
+                        "terminalId" to "Terminal D",
                         "type" to "poi",
                         "name" to props.optString("name"),
                         "level" to props.optInt("level"),
@@ -161,9 +162,9 @@ class MainActivity : ComponentActivity() {
                         "id" to props.optString("id"),
                         "type" to "path",
                         "name" to props.optString("name"),
-                        "level" to props.optInt("level"),
                         "weight" to props.optDouble("weight"),
-                        "coordinates" to pathPoints
+                        "coordinates" to pathPoints,
+                        "isOpen" to true
                     ))
                 }
             }

@@ -4,23 +4,23 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
-import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,12 +31,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.FirstBaseline
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
@@ -49,7 +50,6 @@ import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlin.math.roundToInt
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
 import org.maplibre.android.MapLibre
@@ -70,10 +70,20 @@ import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Point
+import kotlin.math.roundToInt
 
 enum class Direction {
     UP, DOWN, LEFT, RIGHT
 }
+
+data class AmenityDetail(
+    val id: String = "",
+    val name: String = "",
+    val type: String = "",
+    val subType: String = "",
+    val isAccessible: Boolean = false,
+    val nodeId: String = ""
+)
 
 @Composable
 fun MapScreen() {
@@ -89,6 +99,9 @@ fun MapScreen() {
     }
     var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
+    val amenities = remember { mutableStateListOf<AmenityDetail>() }
+    var selectedAmenity by remember { mutableStateOf<AmenityDetail?>(null) }
+
     val graph = remember{
         GraphBuilder.fromGeoJson(context)
     }
@@ -103,9 +116,8 @@ fun MapScreen() {
             getMapAsync { map ->
                 mapRef.value = map
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
-                    Log.d("DEBUG", "Before fetch: mapBackgrounds size = ${mapBackgrounds.size}")
                     setupSourcesAndLayers(context, style, userLocation.value)
-                    fetchDataFromFunctions(style)
+                    fetchDataFromFunctions(style, amenities)
                     
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
@@ -119,8 +131,6 @@ fun MapScreen() {
             }
         }
     }
-
-//    var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     fun computeRoute(userLng: Double, userLat: Double, destLng: Double, destLat: Double): List<Node>? {
         // Find nearest nodes for start location
@@ -242,6 +252,11 @@ fun MapScreen() {
 
                 if (features.isNotEmpty()) {
                     val clickedFeature = features[0]
+                    val nodeId = clickedFeature.getStringProperty("id")
+                    
+                    // Find the amenity linked to this NodeID
+                    selectedAmenity = amenities.find { it.nodeId == nodeId }
+
                     val geometry = clickedFeature.geometry()
 
                     if (geometry is Point) {
@@ -394,10 +409,6 @@ fun MapScreen() {
 
         // Compose UI layer
         if (showAmenityBox) {
-            val selectedBackground = remember(selectedDest, mapBackgrounds) {
-                findBackgroundForSelectedDest(selectedDest, mapBackgrounds)
-            }
-
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -471,7 +482,7 @@ fun MapScreen() {
                         verticalArrangement = Arrangement.Top
                     ) {
                         Text(
-                            text = selectedBackground?.name ?: "Unknown",
+                            text = selectedAmenity?.name ?: "Unknown Amenity",
                             color = androidx.compose.ui.graphics.Color.Black,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -654,9 +665,9 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
         style.addImage("marker-icon", scaledMarkerBitmap)
     }
 
-                    // Add Markers pulled from firebase
-                    val markerSourceId = "marker-source"
-                    style.addSource(GeoJsonSource(markerSourceId))
+    // Add Markers pulled from firebase
+    val markerSourceId = "marker-source"
+    style.addSource(GeoJsonSource(markerSourceId))
 
     style.addLayer(
         SymbolLayer("marker-layer", markerSourceId).withProperties(
@@ -714,7 +725,7 @@ private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean 
     return intersects
 }
 
-private fun fetchDataFromFunctions(style: Style) {
+private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityDetail>) {
     Log.d("FirestoreDB", "MapScreen Initializing map node generation.")
     val functions = Firebase.functions
     // ONLY if testing locally:
@@ -798,5 +809,23 @@ private fun fetchDataFromFunctions(style: Style) {
             }
             val geoJson = """{"type": "FeatureCollection", "features": [${nodeList.joinToString(",")}]}"""
             style.getSourceAs<GeoJsonSource>("marker-source")?.setGeoJson(geoJson)
+        }
+
+    // 4. Fetch Amenities
+    functions.getHttpsCallable("getAmenities").call()
+        .addOnSuccessListener { result ->
+            @Suppress("UNCHECKED_CAST")
+            val data = result.getData() as? List<Map<String, Any>> ?: return@addOnSuccessListener
+            amenities.clear()
+            data.forEach { map ->
+                amenities.add(AmenityDetail(
+                    id = map["AmenityID"] as? String ?: "",
+                    name = map["Name"] as? String ?: "Unknown",
+                    type = map["AmenityType"] as? String ?: "",
+                    subType = map["SubTypeName"] as? String ?: "",
+                    isAccessible = map["IsAccessible"] as? Boolean ?: false,
+                    nodeId = map["NodeID"] as? String ?: ""
+                ))
+            }
         }
 }

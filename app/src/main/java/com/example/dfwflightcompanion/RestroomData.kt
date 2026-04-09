@@ -1,18 +1,20 @@
 package com.example.dfwflightcompanion
 
 object RestroomData {
-    val restroomSets = listOf(
-        // Set 1: North West
-        createSet(1, "poi_rr_nw", "North West"),
-        // Set 2: South West
-        createSet(2, "poi_rr_sw", "South West"),
-        // Set 3: North East
-        createSet(3, "poi_rr_ne", "North East"),
-        // Set 4: South East
-        createSet(4, "poi_rr_se", "South East")
-    ).flatten()
+    private val congestionLevels = listOf("Low", "Medium", "High")
 
-    val congestionLevels = listOf("Low", "Medium", "High")
+    val restroomSets: List<RestroomInfo> by lazy {
+        listOf(
+            // Set 1: North West
+            createSet(1, "poi_rr_nw", "North West"),
+            // Set 2: South West
+            createSet(2, "poi_rr_sw", "South West"),
+            // Set 3: North East
+            createSet(3, "poi_rr_ne", "North East"),
+            // Set 4: South East
+            createSet(4, "poi_rr_se", "South East")
+        ).flatten()
+    }
 
     private fun createSet(setNum: Int, nodeId: String, location: String): List<RestroomInfo> {
         return listOf(

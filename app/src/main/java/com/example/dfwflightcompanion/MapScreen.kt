@@ -70,8 +70,12 @@ import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
+import org.maplibre.geojson.Feature
+import org.maplibre.geojson.LineString
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 enum class Direction {
     UP, DOWN, LEFT, RIGHT
@@ -89,6 +93,7 @@ data class AmenityDetail(
 
 @Composable
 fun MapScreen() {
+    val CLOSE_THRESHOLD = 0.00005
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var isNavigating by remember { mutableStateOf(false) }
@@ -136,6 +141,29 @@ fun MapScreen() {
         }
     }
 
+    // Function to cancel navigation
+    val cancelNavigation = {
+        isNavigating = false
+        currentDestination = null
+        mapRef.value?.let { map ->
+            map.style?.let { style ->
+                // Clear the route by providing a valid empty FeatureCollection
+                style.getSourceAs<GeoJsonSource>("route-source")?.setGeoJson("""{"type": "FeatureCollection", "features": []}""")
+            }
+            // Reset camera to normal
+            map.animateCamera(
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.Builder()
+                        .target(initialCameraPosition)
+                        .zoom(16.0)
+                        .bearing(0.0)
+                        .tilt(0.0)
+                        .build()
+                ), 2000
+            )
+        }
+    }
+
     fun computeRoute(userLng: Double, userLat: Double, destLng: Double, destLat: Double): List<Node>? {
         // Find nearest nodes for start location
         val userNode = Node(userLng, userLat)
@@ -150,7 +178,24 @@ fun MapScreen() {
 
         // Run A*
         val pathNodes = Pathfinding.aStar(updatedGraph, startNode, endNode)
-        if(pathNodes.isEmpty()) return null
+
+        if(pathNodes.isEmpty()){
+            val style = mapRef.value?.style
+            val routeSource = style?.getSourceAs<GeoJsonSource>("route-source")
+            routeSource?.setGeoJson(
+                FeatureCollection.fromFeatures(arrayOf())
+            )
+
+            return null
+        }
+
+        val dx = startNode.lng - endNode.lng
+        val dy = startNode.lat - endNode.lat
+        val distance = sqrt(dx * dx + dy * dy)
+        if(pathNodes.size == 2 && distance < CLOSE_THRESHOLD){
+            cancelNavigation()
+            return null
+        }
 
         return pathNodes
     }
@@ -176,19 +221,15 @@ fun MapScreen() {
         }
 
         // Route from User Location to destination
-        val routeJson = """
-            {
-              "type": "Feature",
-              "geometry": {
-                "type": "LineString",
-                "coordinates": [
-                  $coordinates
-                ]
-              }
-            }
-        """.trimIndent()
+        val points = path.map {
+            Point.fromLngLat(it.lng, it.lat)
+        }
 
-        routeSource?.setGeoJson(routeJson)
+        val lineString = LineString.fromLngLats(points)
+        val feature = Feature.fromGeometry(lineString)
+
+        // Update source
+        routeSource?.setGeoJson(feature)
 
         // Animate camera to follow route
         map.animateCamera(
@@ -201,29 +242,6 @@ fun MapScreen() {
                     .build()
             ), 2000
         )
-    }
-
-    // Function to cancel navigation
-    val cancelNavigation = {
-        isNavigating = false
-        currentDestination = null
-        mapRef.value?.let { map ->
-            map.style?.let { style ->
-                // Clear the route by providing a valid empty FeatureCollection
-                style.getSourceAs<GeoJsonSource>("route-source")?.setGeoJson("""{"type": "FeatureCollection", "features": []}""")
-            }
-            // Reset camera to normal
-            map.animateCamera(
-                CameraUpdateFactory.newCameraPosition(
-                    CameraPosition.Builder()
-                        .target(initialCameraPosition)
-                        .zoom(16.0)
-                        .bearing(0.0)
-                        .tilt(0.0)
-                        .build()
-                ), 2000
-            )
-        }
     }
 
     var showAmenityBox by remember { mutableStateOf(false) } // box for viewing amenity details
@@ -353,17 +371,16 @@ fun MapScreen() {
             "[${it.lng}, ${it.lat}]"
         }
 
-        val routeJson = """
-        {
-          "type": "Feature",
-          "geometry": {
-            "type": "LineString",
-            "coordinates": [ $coordinates ]
-          }
+        // Route from User Location to destination
+        val points = path.map {
+            Point.fromLngLat(it.lng, it.lat)
         }
-    """.trimIndent()
 
-        routeSource.setGeoJson(routeJson)
+        val lineString = LineString.fromLngLats(points)
+        val feature = Feature.fromGeometry(lineString)
+
+        // Update source
+        routeSource.setGeoJson(feature)
     }
 
     // Updating the users location when the user is moved
@@ -373,17 +390,14 @@ fun MapScreen() {
 
         val source = style.getSourceAs<GeoJsonSource>("user-source") ?: return
 
-        val updatedJson = """
-        {
-          "type": "Feature",
-          "geometry": {
-            "type": "Point",
-            "coordinates": [$newLng, $newLat]
-          }
-        }
-        """.trimIndent()
+        // Create a MapLibre Point for the new location
+        val point = Point.fromLngLat(newLng, newLat)
 
-        source.setGeoJson(updatedJson)
+        // Wrap it in a Feature
+        val feature = Feature.fromGeometry(point)
+
+        // Update the source
+        source.setGeoJson(feature)
 
         if(isNavigating){
             map.animateCamera(
@@ -428,7 +442,7 @@ fun MapScreen() {
     }
 
     fun moveUser(direction: Direction) {
-        val step = 0.0001  // adjust for speed
+        val step = 0.00005  // adjust for speed
 
         val currentLng = userLocation.value.longitude
         val currentLat = userLocation.value.latitude

@@ -250,7 +250,27 @@ fun MapScreen() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    // viewModel.updateCrowdLevel(level)
+                                    selectedAmenity?.let { amenity ->
+                                        val functions = Firebase.functions
+                                        val data = hashMapOf(
+                                            "amenityId" to amenity.id,
+                                            "congestion" to level
+                                        )
+                                        functions.getHttpsCallable("updateAmenityCongestion").call(data)
+                                            .addOnSuccessListener {
+                                                Log.d("FirestoreDB", "Amenity congestion updated successfully to $level")
+                                                // Update local state
+                                                val index = amenities.indexOfFirst { it.id == amenity.id }
+                                                if (index != -1) {
+                                                    val updated = amenities[index].copy(congestion = level)
+                                                    amenities[index] = updated
+                                                    selectedAmenity = updated
+                                                }
+                                            }
+                                            .addOnFailureListener { e ->
+                                                Log.e("FirestoreDB", "Error updating amenity congestion", e)
+                                            }
+                                    }
                                     showCrowdLvlBox = false
                                 }
                                 .padding(12.dp)
@@ -514,7 +534,7 @@ fun MapScreen() {
                         verticalArrangement = Arrangement.Top
                     ) {
                         Text(
-                            text = selectedAmenity?.name ?: "Unknown Amenity",
+                            text = selectedAmenity?.name ?: selectedBackground?.name ?: "Unknown",
                             color = androidx.compose.ui.graphics.Color.Black,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -556,7 +576,7 @@ fun MapScreen() {
                                 modifier = Modifier.alignBy(FirstBaseline)
                             )
                             Text(
-                                text = "Low",
+                                text = selectedAmenity?.congestion ?: "Low",
                                 color = androidx.compose.ui.graphics.Color(0xFF00C853),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -872,10 +892,11 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
             amenities.clear()
             data.forEach { map ->
                 amenities.add(AmenityDetail(
-                    id = map["AmenityID"] as? String ?: "",
+                    id = map["id"] as? String ?: "",
                     name = map["Name"] as? String ?: "Unknown",
                     type = map["AmenityType"] as? String ?: "",
                     subType = map["SubTypeName"] as? String ?: "",
+                    congestion = map["Congestion"] as? String ?: "Low",
                     isAccessible = map["IsAccessible"] as? Boolean ?: false,
                     nodeId = map["NodeID"] as? String ?: ""
                 ))

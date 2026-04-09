@@ -38,7 +38,7 @@ exports.getAmenities = onCall(async (request) => {
 });
 
 /**
- * Updates the congestion level of an amenity.
+ * Updates the congestion level of an amenity and sets the last updated timestamp.
  */
 exports.updateAmenityCongestion = onCall(async (request) => {
   const { amenityId, congestion } = request.data;
@@ -50,7 +50,8 @@ exports.updateAmenityCongestion = onCall(async (request) => {
   try {
     logger.info(`Updating amenity ${amenityId} congestion to ${congestion}`);
     await db.collection("Amenity").doc(amenityId).update({
-      Congestion: congestion
+      Congestion: congestion,
+      LastUpdated: Date.now()
     });
     return { success: true };
   } catch (error) {

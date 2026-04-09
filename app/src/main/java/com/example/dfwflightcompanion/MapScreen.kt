@@ -82,10 +82,27 @@ data class AmenityDetail(
     val name: String = "",
     val type: String = "",
     val subType: String = "",
-    val congestion: String = "",
+    var congestion: String = "",
+    val lastUpdated: Long = 0L,
     val isAccessible: Boolean = true,
     val nodeId: String = ""
 )
+
+fun formatTimeAgo(timestamp: Long): String {
+    if (timestamp == 0L) return "Never"
+    val diff = System.currentTimeMillis() - timestamp
+    val seconds = diff / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    val days = hours / 24
+
+    return when {
+        seconds < 60 -> "${seconds}s ago"
+        minutes < 60 -> "${minutes}m ago"
+        hours < 24 -> "${hours}h ago"
+        else -> "${days}d ago"
+    }
+}
 
 @Composable
 fun MapScreen() {
@@ -242,7 +259,6 @@ fun MapScreen() {
                 )
             },
             text = {
-                @Suppress("ControlFlowWithEmptyBody")
                 Column {
                     listOf("Low", "Medium", "High").forEach { level ->
                         Text(
@@ -262,7 +278,10 @@ fun MapScreen() {
                                                 // Update local state
                                                 val index = amenities.indexOfFirst { it.id == amenity.id }
                                                 if (index != -1) {
-                                                    val updated = amenities[index].copy(congestion = level)
+                                                    val updated = amenities[index].copy(
+                                                        congestion = level,
+                                                        lastUpdated = System.currentTimeMillis()
+                                                    )
                                                     amenities[index] = updated
                                                     selectedAmenity = updated
                                                 }
@@ -593,6 +612,14 @@ fun MapScreen() {
                                     .alignBy(FirstBaseline)
                                     .padding(start = 6.dp)
                             )
+                            Text(
+                                text = selectedAmenity?.let { formatTimeAgo(it.lastUpdated) } ?: "1min Ago",
+                                color = androidx.compose.ui.graphics.Color(0xFF00C853),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                modifier = Modifier.alignBy(FirstBaseline)
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(20.dp))
@@ -897,6 +924,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                     type = map["AmenityType"] as? String ?: "",
                     subType = map["SubTypeName"] as? String ?: "",
                     congestion = map["Congestion"] as? String ?: "Low",
+                    lastUpdated = (map["LastUpdated"] as? Number)?.toLong() ?: 0L,
                     isAccessible = map["IsAccessible"] as? Boolean ?: false,
                     nodeId = map["NodeID"] as? String ?: ""
                 ))

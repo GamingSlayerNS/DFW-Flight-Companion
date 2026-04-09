@@ -82,7 +82,8 @@ data class AmenityDetail(
     val name: String = "",
     val type: String = "",
     val subType: String = "",
-    val isAccessible: Boolean = false,
+    val congestion: String = "",
+    val isAccessible: Boolean = true,
     val nodeId: String = ""
 )
 

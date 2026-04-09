@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
                         "Name" to restroom.name,
                         "AmenityType" to "Restroom",
                         "SubTypeName" to restroom.type,
+                        "Congestion" to restroom.congestion,
                         "IsAccessible" to restroom.isAccessible,
                         "NodeID" to restroom.nodeId
                     ))

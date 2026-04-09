@@ -10,9 +10,9 @@ object RestroomData {
         createSet(3, "poi_rr_ne", "North East"),
         // Set 4: South East
         createSet(4, "poi_rr_se", "South East")
-        // Note: For now, I'm mapping the 4 POIs available in routing.geojson.
-        // If you add more POIs to routing.geojson, add them here too.
     ).flatten()
+
+    val congestionLevels = listOf("Low", "Medium", "High")
 
     private fun createSet(setNum: Int, nodeId: String, location: String): List<RestroomInfo> {
         return listOf(
@@ -20,6 +20,7 @@ object RestroomData {
                 id = "RR_${setNum}_M",
                 name = "Male Restroom - $location",
                 type = "Male",
+                congestion = congestionLevels.random(),
                 isAccessible = true,
                 nodeId = nodeId
             ),
@@ -27,6 +28,7 @@ object RestroomData {
                 id = "RR_${setNum}_F",
                 name = "Female Restroom - $location",
                 type = "Female",
+                congestion = congestionLevels.random(),
                 isAccessible = true,
                 nodeId = nodeId
             ),
@@ -34,6 +36,7 @@ object RestroomData {
                 id = "RR_${setNum}_H",
                 name = "Handicap Restroom - $location",
                 type = "Handicap",
+                congestion = congestionLevels.random(),
                 isAccessible = true,
                 nodeId = nodeId
             )
@@ -45,6 +48,7 @@ data class RestroomInfo(
     val id: String,
     val name: String,
     val type: String,
+    val congestion: String,
     val isAccessible: Boolean,
     val nodeId: String
 )

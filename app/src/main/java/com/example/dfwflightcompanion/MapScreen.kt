@@ -776,7 +776,12 @@ fun MapScreen() {
 
             AlertDialog(
                 onDismissRequest = { showFilterDialog = false },
-                title = { Text("Custom Preferences") },
+                title = {
+                    Text(
+                        "Custom Preferences",
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                },
                 text = {
                     Column {
 
@@ -829,6 +834,18 @@ fun MapScreen() {
                         womens = tempWomens
 
                         applyCustomFilters()
+
+                        // Reset camera to normal
+                        mapRef.value?.animateCamera(
+                            CameraUpdateFactory.newCameraPosition(
+                                CameraPosition.Builder()
+                                    .target(initialCameraPosition)
+                                    .zoom(16.0)
+                                    .bearing(0.0)
+                                    .tilt(0.0)
+                                    .build()
+                            ), 2000
+                        )
                     }) {
                         Text("Apply")
                     }

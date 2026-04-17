@@ -62,5 +62,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    implementation("org.maplibre.gl:android-sdk:11.0.0")
+    implementation("org.maplibre.gl:android-sdk:11.6.1-vulkan-pre1")
 }

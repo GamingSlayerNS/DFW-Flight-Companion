@@ -965,7 +965,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
                     stop(20, 1.6f)
                 )
             ),
-            iconAllowOverlap(false)
+            iconAllowOverlap(true)
         )
     )
 

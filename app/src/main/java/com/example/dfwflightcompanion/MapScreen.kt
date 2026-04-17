@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -64,10 +66,13 @@ import org.maplibre.android.style.expressions.Expression.*
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconSize
+import org.maplibre.android.style.layers.PropertyFactory.visibility
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.FeatureCollection
@@ -90,6 +95,15 @@ data class AmenityDetail(
     val lastUpdated: Long = 0L,
     val isAccessible: Boolean = true,
     val nodeId: String = ""
+)
+
+data class MapNode(
+    val id: String,
+    val latitude: Double,
+    val longitude: Double,
+    val level: Int,
+    val type: String = "",
+    val name: String = ""
 )
 
 fun formatTimeAgo(timestamp: Long): String {
@@ -127,6 +141,14 @@ fun MapScreen() {
     val amenities = remember { mutableStateListOf<AmenityDetail>() }
     var selectedAmenity by remember { mutableStateOf<AmenityDetail?>(null) }
 
+    val mapNodes = remember { mutableListOf<MapNode>() }
+    var showFilterDialog by remember { mutableStateOf(false) }
+
+    // Custom Filter Checkbox states
+    var wheelchair by remember { mutableStateOf(false) }
+    var mens by remember { mutableStateOf(false) }
+    var womens by remember { mutableStateOf(false) }
+
     val graph = remember{
         GraphBuilder.fromGeoJson(context)
     }
@@ -141,9 +163,8 @@ fun MapScreen() {
             getMapAsync { map ->
                 mapRef.value = map
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
-                    Log.d("DEBUG", "Before fetch: mapBackgrounds size = ${mapBackgrounds.size}")
                     setupSourcesAndLayers(context, style, userLocation.value)
-                    fetchDataFromFunctions(style, amenities)
+                    fetchDataFromFunctions(style, amenities, mapNodes)
                     
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
@@ -334,15 +355,24 @@ fun MapScreen() {
             map.addOnMapClickListener { point ->
                 val screenPoint = map.projection.toScreenLocation(point)
                 val features = map.queryRenderedFeatures(screenPoint, "marker-layer")
+                val amenityFeatures = map.queryRenderedFeatures(screenPoint, "amenity-layer") // when user clicks on map marker after setting custom filters
 
-                if (features.isNotEmpty()) {
-                    val clickedFeature = features[0]
-                    val nodeId = clickedFeature.getStringProperty("id")
+                if (features.isNotEmpty() || amenityFeatures.isNotEmpty()) {
+                    val clickedFeature = when {
+                        features.isNotEmpty() -> features[0]
+                        amenityFeatures.isNotEmpty() -> amenityFeatures[0]
+                        else -> null
+                    }
+                    val nodeId = clickedFeature?.getStringProperty("id")
 
                     // Find the amenity linked to this NodeID
-                    selectedAmenity = amenities.find { it.nodeId == nodeId }
+                    selectedAmenity = when {
+                        features.isNotEmpty() -> amenities.find { it.nodeId == nodeId }
+                        amenityFeatures.isNotEmpty() -> amenities.find { it.id == nodeId }
+                        else -> null
+                    }
 
-                    val geometry = clickedFeature.geometry()
+                    val geometry = clickedFeature?.geometry()
 
                     if (geometry is Point) {
                         val destLng = geometry.longitude()
@@ -480,6 +510,45 @@ fun MapScreen() {
         updateUserLocation(newLng, newLat)
     }
 
+    fun applyCustomFilters() {
+        val filtered = amenities.filter { amenity ->
+            val matchesWheelchair = wheelchair && amenity.subType.equals("Handicap", true)
+            val matchesMens = mens && amenity.subType.equals("Male", true)
+            val matchesWomens = womens && amenity.subType.equals("Female", true)
+
+            if (!wheelchair && !mens && !womens) {
+                true
+            } else {
+                matchesWheelchair || matchesMens || matchesWomens
+            }
+        }
+
+        val filteredFeatures = filtered.mapNotNull { amenity ->
+            val node = mapNodes.find { it.id == amenity.nodeId }
+            if (node == null) {
+                Log.e("DEBUG", "No node found for amenity ${amenity.id} nodeId=${amenity.nodeId}")
+                return@mapNotNull null
+            }
+
+            Feature.fromGeometry(
+                Point.fromLngLat(node.longitude, node.latitude)
+            ).apply {
+                addStringProperty("id", amenity.id)
+                addStringProperty("name", amenity.name)
+                addStringProperty("type", amenity.type)
+                addStringProperty("subType", amenity.subType)
+                addStringProperty("congestion", amenity.congestion)
+                addNumberProperty("lastUpdated", amenity.lastUpdated)
+                addBooleanProperty("isAccessible", amenity.isAccessible)
+                addStringProperty("nodeId", amenity.nodeId)
+            }
+        }
+
+        mapRef.value?.style?.getSourceAs<GeoJsonSource>("amenity-source")
+            ?.setGeoJson(FeatureCollection.fromFeatures(filteredFeatures))
+        mapRef.value?.style?.getLayer("marker-layer")
+            ?.setProperties(visibility(Property.NONE))
+    }
 
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -488,7 +557,34 @@ fun MapScreen() {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Compose UI layer
+        // Custom Filter Button
+        Box(
+            modifier = Modifier
+                .padding(16.dp)
+                .size(54.dp)
+                .align(Alignment.TopEnd)
+                .border(
+                    width = 1.dp,
+                    color = androidx.compose.ui.graphics.Color.Black,
+                    shape = CircleShape
+                )
+                .background(
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f),
+                    shape = CircleShape
+                )
+                .clickable {
+                    showFilterDialog = true
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.filter_icon),
+                contentDescription = "Filter",
+                tint = androidx.compose.ui.graphics.Color.Black
+            )
+        }
+
+        // View Amenity Details Box
         if (showAmenityBox) {
             val selectedBackground = remember(selectedDest, mapBackgrounds) {
                 findBackgroundForSelectedDest(selectedDest, mapBackgrounds)
@@ -671,6 +767,79 @@ fun MapScreen() {
             }
         }
 
+        // AlertDialog with Checkboxes
+        if (showFilterDialog) {
+            var tempWheelchair by remember { mutableStateOf(wheelchair) }
+            var tempMens by remember { mutableStateOf(mens) }
+            var tempWomens by remember { mutableStateOf(womens) }
+
+            AlertDialog(
+                onDismissRequest = { showFilterDialog = false },
+                title = { Text("Custom Preferences") },
+                text = {
+                    Column {
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                tempWheelchair = !tempWheelchair
+                            }
+                        ) {
+                            Checkbox(
+                                checked = tempWheelchair,
+                                onCheckedChange = { tempWheelchair = it }
+                            )
+                            Text("Wheelchair Accessible")
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                tempMens = !tempMens
+                            }
+                        ) {
+                            Checkbox(
+                                checked = tempMens,
+                                onCheckedChange = { tempMens = it }
+                            )
+                            Text("Men's Restrooms")
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                tempWomens = !tempWomens
+                            }
+                        ) {
+                            Checkbox(
+                                checked = tempWomens,
+                                onCheckedChange = { tempWomens = it }
+                            )
+                            Text("Women's Restrooms")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showAmenityBox = false
+                        showFilterDialog = false
+                        wheelchair = tempWheelchair
+                        mens = tempMens
+                        womens = tempWomens
+
+                        applyCustomFilters()
+                    }) {
+                        Text("Apply")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showFilterDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
         // Stop Navigation Button
         if (isNavigating) {
             Button(
@@ -798,6 +967,26 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
             iconAllowOverlap(false)
         )
     )
+
+    style.addSource(
+        GeoJsonSource("amenity-source", FeatureCollection.fromFeatures(emptyList()))
+    )
+    style.addLayerAbove(
+        SymbolLayer("amenity-layer", "amenity-source").withProperties(
+            iconImage("marker-icon"),
+            iconSize(
+                interpolate(
+                    exponential(1.5f),
+                    zoom(),
+                    stop(12, 0.4f),
+                    stop(16, 0.8f),
+                    stop(20, 1.6f)
+                )
+            ),
+            iconAllowOverlap(true),
+            iconIgnorePlacement(true)
+        ), "marker-layer"
+    )
 }
 
 private val mapBackgrounds = mutableStateListOf<MapBackground>() // list used for fetching map background data from db
@@ -839,7 +1028,7 @@ private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean 
     return intersects
 }
 
-private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityDetail>) {
+private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityDetail>, mapNodes: MutableList<MapNode>) {
     Log.d("FirestoreDB", "MapScreen Initializing map node generation.")
     val functions = Firebase.functions
     // ONLY if testing locally:
@@ -919,6 +1108,16 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                 val id = doc["id"] as? String ?: ""
                 val level = (doc["level"] as? Number)?.toInt() ?: 0
                 if (id != "poi_entrance" && id != "poi_exit") {
+                    mapNodes.add(
+                        MapNode(
+                            id = id,
+                            latitude = lat,
+                            longitude = lng,
+                            level = level,
+                            type = type,
+                            name = name
+                        )
+                    )
                     nodeList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Point", "coordinates": [$lng, $lat]}}""")
                 }
             }

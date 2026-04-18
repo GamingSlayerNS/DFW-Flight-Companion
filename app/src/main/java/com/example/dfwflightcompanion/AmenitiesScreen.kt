@@ -1,6 +1,7 @@
 package com.example.dfwflightcompanion
 
 import android.util.Log
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
 
@@ -26,7 +28,10 @@ data class Amenity(
 )
 
 @Composable
-fun AmenitiesScreen() {
+fun AmenitiesScreen(
+    navController: NavHostController,
+    mapViewModel: MapViewModel
+) {
     var amenities by remember { mutableStateOf<List<Amenity>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -93,7 +98,11 @@ fun AmenitiesScreen() {
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(amenities) { amenity ->
-                    AmenityCard(amenity)
+                    AmenityCard(
+                        amenity = amenity,
+                        navController = navController,
+                        mapViewModel = mapViewModel
+                    )
                 }
             }
         }
@@ -101,9 +110,18 @@ fun AmenitiesScreen() {
 }
 
 @Composable
-fun AmenityCard(amenity: Amenity) {
+fun AmenityCard(
+    amenity: Amenity,
+    navController: NavHostController,
+    mapViewModel: MapViewModel
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                mapViewModel.selectAmenity(amenity.id)
+                navController.navigate(Destination.MAP.route)
+            },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(

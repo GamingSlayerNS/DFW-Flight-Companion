@@ -54,6 +54,8 @@ import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
 import org.maplibre.android.MapLibre
@@ -82,6 +84,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.LineString
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import kotlinx.coroutines.delay
 
 enum class Direction {
     UP, DOWN, LEFT, RIGHT
@@ -124,7 +127,10 @@ fun formatTimeAgo(timestamp: Long): String {
 }
 
 @Composable
-fun MapScreen() {
+fun MapScreen(
+    navController: NavHostController,
+    mapViewModel: MapViewModel
+) {
     val CLOSE_THRESHOLD = 0.00005
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -149,6 +155,9 @@ fun MapScreen() {
     var wheelchair by remember { mutableStateOf(false) }
     var mens by remember { mutableStateOf(false) }
     var womens by remember { mutableStateOf(false) }
+
+    var selectionFromAmenityScreen by remember { mutableStateOf<String?>(null) }
+    var cameraBearing by remember { mutableStateOf(0.0) } // tracking the camera angle
 
     val graph = remember{
         GraphBuilder.fromGeoJson(context)
@@ -350,6 +359,25 @@ fun MapScreen() {
         )
     }
 
+    LaunchedEffect(mapRef.value) {
+        while (true) {
+            val map = mapRef.value ?: return@LaunchedEffect
+            cameraBearing = map.cameraPosition.bearing
+            delay(16) // ~60fps
+        }
+    }
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    LaunchedEffect(navBackStackEntry) {
+        val currentRoute = navBackStackEntry?.destination?.route
+
+        if (currentRoute != "map") {
+            showAmenityBox = false
+            selectionFromAmenityScreen = null
+            mapViewModel.selectAmenity(null)
+        }
+    }
+
         // Checks to see if marker on the map is clicked
     DisposableEffect(Unit) {
     mapView.getMapAsync { map ->
@@ -474,6 +502,40 @@ fun MapScreen() {
         }
     }
 
+    LaunchedEffect(mapViewModel.selectedAmenityId, amenities.size) {
+        selectionFromAmenityScreen = mapViewModel.selectedAmenityId
+        if (selectionFromAmenityScreen == null) {
+            selectedAmenity = null
+            showAmenityBox = false
+            return@LaunchedEffect
+        }
+        if (selectionFromAmenityScreen != null && amenities.isNotEmpty()) {
+            selectionFromAmenityScreen.let { id ->
+                val amenity = amenities.find { it.id == id }
+                if (amenity != null) {
+                    val amenityScreenSelectionNode = mapNodes.find { it.id == amenity.nodeId }
+                    if (amenityScreenSelectionNode != null) {
+                        val nodeLat = amenityScreenSelectionNode.latitude
+                        val nodeLng = amenityScreenSelectionNode.longitude
+                        mapRef.value?.animateCamera(
+                            CameraUpdateFactory.newCameraPosition(
+                                CameraPosition.Builder()
+                                    .target(LatLng(nodeLat, nodeLng))
+                                    .zoom(19.0)
+                                    .bearing(180.0)   // Face south
+                                    .tilt(45.0)
+                                    .build()
+                            )
+                        )
+                        selectedDest = Pair(nodeLng, nodeLat)
+                    }
+                    selectedAmenity = amenity
+                    showAmenityBox = true
+                }
+            }
+        }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -551,6 +613,11 @@ fun MapScreen() {
             ?.setProperties(visibility(Property.NONE))
     }
 
+    val filterButtonPadding = if (cameraBearing in 0.0000000001..359.9999999999) {
+        Modifier.padding(top = 56.dp, end = 6.dp)   // facing off-north
+    } else {
+        Modifier.padding(top = 8.dp, end = 6.dp)    // default (facing north)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
@@ -560,8 +627,7 @@ fun MapScreen() {
 
         // Custom Filter Button
         Box(
-            modifier = Modifier
-                .padding(16.dp)
+            modifier = filterButtonPadding
                 .size(54.dp)
                 .align(Alignment.TopEnd)
                 .border(
@@ -986,6 +1052,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
         )
     )
 
+    // For displaying the markers when user sets custom filters
     style.addSource(
         GeoJsonSource("amenity-source", FeatureCollection.fromFeatures(emptyList()))
     )
@@ -1125,7 +1192,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                 val name = doc["name"] as? String ?: ""
                 val id = doc["id"] as? String ?: ""
                 val level = (doc["level"] as? Number)?.toInt() ?: 0
-                if (id != "poi_entrance" && id != "poi_exit") {
+                if (id != "node_entrance" && id != "node_exit") {
                     mapNodes.add(
                         MapNode(
                             id = id,

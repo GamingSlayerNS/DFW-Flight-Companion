@@ -1,6 +1,5 @@
 package com.example.dfwflightcompanion
 
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,8 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.google.firebase.Firebase
-import com.google.firebase.functions.functions
 
 data class Amenity(
     val id: String = "",
@@ -32,15 +29,16 @@ fun AmenitiesScreen(
     navController: NavHostController,
     mapViewModel: MapViewModel
 ) {
-    var amenities by remember { mutableStateOf<List<Amenity>>(emptyList()) }
+    // var amenities by remember { mutableStateOf<List<Amenity>>(emptyList()) }
+    val amenities = mapViewModel.amenities
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    /* LaunchedEffect(Unit) {
         try {
             val functions = Firebase.functions
             // ONLY if testing locally:
-             functions.useEmulator("10.0.2.2", 5001)
+            functions.useEmulator("10.0.2.2", 5001)
 
             functions.getHttpsCallable("getAmenities")
                 .call()
@@ -57,7 +55,7 @@ fun AmenitiesScreen(
                                 nodeId = map["NodeID"] as? String ?: ""
                             )
                         }
-                        amenities = fetchedAmenities.take(7) // only display the first 7 restrooms from DB
+                        amenities = fetchedAmenities
                     }
                     isLoading = false
                 }
@@ -69,6 +67,13 @@ fun AmenitiesScreen(
         } catch (e: Exception) {
             Log.e("AmenitiesScreen", "Failed to initialize functions", e)
             errorMessage = "Initialization error: ${e.message}"
+            isLoading = false
+        }
+        amenities = mapViewModel.amenities
+    } */
+
+    LaunchedEffect(amenities) {
+        if (amenities.isNotEmpty()) {
             isLoading = false
         }
     }

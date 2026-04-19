@@ -2,7 +2,6 @@ package com.example.dfwflightcompanion
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -11,11 +10,9 @@ import androidx.navigation.compose.composable
 fun AppNavHost(
     navController: NavHostController,
     startDestination: Destination,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    mapViewModel: MapViewModel
 ) {
-    // Shared ViewModel between screens
-    val mapViewModel: MapViewModel = viewModel()
-
     NavHost(
         navController = navController,
         startDestination = startDestination.route,

@@ -174,7 +174,7 @@ fun MapScreen(
                 mapRef.value = map
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
                     setupSourcesAndLayers(context, style, userLocation.value)
-                    fetchDataFromFunctions(style, amenities, mapNodes)
+                    fetchDataFromFunctions(style, amenities, mapNodes, mapViewModel)
                     
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
@@ -367,18 +367,7 @@ fun MapScreen(
         }
     }
 
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    LaunchedEffect(navBackStackEntry) {
-        val currentRoute = navBackStackEntry?.destination?.route
-
-        if (currentRoute != "map") {
-            showAmenityBox = false
-            selectionFromAmenityScreen = null
-            mapViewModel.selectAmenity(null)
-        }
-    }
-
-        // Checks to see if marker on the map is clicked
+    // Checks to see if marker on the map is clicked
     DisposableEffect(Unit) {
     mapView.getMapAsync { map ->
             map.addOnMapClickListener { point ->
@@ -1118,7 +1107,7 @@ private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean 
     return intersects
 }
 
-private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityDetail>, mapNodes: MutableList<MapNode>) {
+private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityDetail>, mapNodes: MutableList<MapNode>, mapViewModel: MapViewModel) {
     Log.d("FirestoreDB", "MapScreen Initializing map node generation.")
     val functions = Firebase.functions
     // ONLY if testing locally:
@@ -1237,5 +1226,6 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
             if (amenities.size > 7) {
                 amenities.subList(7, amenities.size).clear()
             }
+            mapViewModel.storeAmenities(amenities)
         }
 }

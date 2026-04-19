@@ -57,7 +57,7 @@ fun AmenitiesScreen(
                                 nodeId = map["NodeID"] as? String ?: ""
                             )
                         }
-                        amenities = fetchedAmenities
+                        amenities = fetchedAmenities.take(7) // only display the first 7 restrooms from DB
                     }
                     isLoading = false
                 }

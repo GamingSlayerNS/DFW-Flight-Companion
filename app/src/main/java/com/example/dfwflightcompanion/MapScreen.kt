@@ -148,7 +148,7 @@ fun MapScreen(
     val amenities = remember { mutableStateListOf<AmenityDetail>() }
     var selectedAmenity by remember { mutableStateOf<AmenityDetail?>(null) }
 
-    val mapNodes = remember { mutableListOf<MapNode>() }
+    val mapNodes = remember { mutableStateListOf<MapNode>() }
     var showFilterDialog by remember { mutableStateOf(false) }
 
     // Custom Filter Checkbox states
@@ -502,11 +502,16 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(mapViewModel.selectedAmenityId, amenities.size) {
+    LaunchedEffect(mapViewModel.selectedAmenityId, amenities.size, mapNodes.size) {
         selectionFromAmenityScreen = mapViewModel.selectedAmenityId
         if (selectionFromAmenityScreen == null) {
             selectedAmenity = null
             showAmenityBox = false
+            return@LaunchedEffect
+        }
+        // Wait until both lists are ready
+        if (amenities.isEmpty() || mapNodes.isEmpty()) {
+            Log.d("Loading Lists", "Skipping lookup: amenities=${amenities.size}, mapNodes=${mapNodes.size}")
             return@LaunchedEffect
         }
         if (selectionFromAmenityScreen != null && amenities.isNotEmpty()) {
@@ -1206,7 +1211,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                     nodeList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Point", "coordinates": [$lng, $lat]}}""")
                 }
             }
-            val geoJson = """{"type": "FeatureCollection", "features": [${nodeList.joinToString(",")}]}"""
+            val geoJson = """{"type": "FeatureCollection", "features": [${nodeList.take(7).joinToString(",")}]}""" // only display markers for the first 7 restrooms from DB
             style.getSourceAs<GeoJsonSource>("marker-source")?.setGeoJson(geoJson)
         }
 
@@ -1227,6 +1232,10 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                     isAccessible = map["IsAccessible"] as? Boolean ?: false,
                     nodeId = map["NodeID"] as? String ?: ""
                 ))
+            }
+            // only store the first 7 restrooms from DB
+            if (amenities.size > 7) {
+                amenities.subList(7, amenities.size).clear()
             }
         }
 }

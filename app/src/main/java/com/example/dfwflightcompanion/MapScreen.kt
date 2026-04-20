@@ -522,6 +522,7 @@ fun MapScreen(
                             )
                         )
                         selectedDest = Pair(nodeLng, nodeLat)
+                        currentDestination = Pair(nodeLng, nodeLat)
                     }
                     selectedAmenity = amenity
                     showAmenityBox = true

@@ -14,7 +14,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun BottomNavigationBar(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     val startDestination = Destination.MAP
-    var selectedDestination by rememberSaveable { mutableIntStateOf(startDestination.ordinal) }
     val mapViewModel: MapViewModel = viewModel() // Shared ViewModel between screens
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -25,18 +24,18 @@ fun BottomNavigationBar(modifier: Modifier = Modifier) {
             NavigationBar {
                 Destination.entries.forEachIndexed { index, destination ->
                     NavigationBarItem(
-                        selected = selectedDestination == index,
+                        selected = currentRoute == destination.route,
                         onClick = {
                             if (currentRoute == destination.route) {
                                 if (destination == Destination.MAP) {
                                     mapViewModel.selectAmenity(null)
                                 }
+                            } else {
+                                navController.navigate(destination.route) {
+                                    popUpTo(navController.graph.startDestinationId)
+                                    launchSingleTop = true
+                                }
                             }
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.startDestinationId)
-                                launchSingleTop = true
-                            }
-                            selectedDestination = index
                         },
                         icon = {
                             Icon(

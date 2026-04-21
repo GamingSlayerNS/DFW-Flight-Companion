@@ -5,7 +5,7 @@
       "type": "Feature",
       "properties": {
         "type": "poi",
-        "id": "poi_entrance",
+        "id": "node_entrance",
         "name": "Main Entrance",
         "level": 1,
         "weight": 1.0
@@ -19,7 +19,7 @@
       "type": "Feature",
       "properties": {
         "type": "poi",
-        "id": "poi_exit",
+        "id": "node_exit",
         "name": "Main Exit",
         "level": 1,
         "weight": 1.0
@@ -33,8 +33,22 @@
       "type": "Feature",
       "properties": {
         "type": "poi",
-        "id": "poi_rr_nw",
-        "name": "Restroom NW",
+        "id": "node_rr_nw_m",
+        "name": "Restroom NW Male",
+        "level": 1,
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-97.0449, 32.89885, 1]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "poi",
+        "id": "node_rr_nw_f",
+        "name": "Restroom NW Female",
         "level": 1,
         "weight": 1.0
       },
@@ -47,8 +61,36 @@
       "type": "Feature",
       "properties": {
         "type": "poi",
-        "id": "poi_rr_sw",
-        "name": "Restroom SW",
+        "id": "node_rr_nw_h",
+        "name": "Restroom NW Handicap",
+        "level": 1,
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-97.0449, 32.89865, 1]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "poi",
+        "id": "node_rr_sw_m",
+        "name": "Restroom SW Male",
+        "level": 1,
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-97.0449, 32.89635, 1]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "poi",
+        "id": "node_rr_sw_f",
+        "name": "Restroom SW Female",
         "level": 1,
         "weight": 1.0
       },
@@ -61,8 +103,36 @@
       "type": "Feature",
       "properties": {
         "type": "poi",
-        "id": "poi_rr_ne",
-        "name": "Restroom NE",
+        "id": "node_rr_sw_h",
+        "name": "Restroom SW Handicap",
+        "level": 1,
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-97.0449, 32.89615, 1]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "poi",
+        "id": "node_rr_ne_m",
+        "name": "Restroom NE Male",
+        "level": 1,
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-97.0443, 32.89635, 1]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "poi",
+        "id": "node_rr_ne_f",
+        "name": "Restroom NE Female",
         "level": 1,
         "weight": 1.0
       },
@@ -75,14 +145,56 @@
       "type": "Feature",
       "properties": {
         "type": "poi",
-        "id": "poi_rr_se",
-        "name": "Restroom SE",
+        "id": "node_rr_ne_h",
+        "name": "Restroom NE Handicap",
+        "level": 1,
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-97.0443, 32.89615, 1]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "poi",
+        "id": "node_rr_se_m",
+        "name": "Restroom SE Male",
+        "level": 1,
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-97.0443, 32.89735, 1]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "poi",
+        "id": "node_rr_se_f",
+        "name": "Restroom SE Female",
         "level": 1,
         "weight": 1.0
       },
       "geometry": {
         "type": "Point",
         "coordinates": [-97.0443, 32.89725, 1]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "poi",
+        "id": "node_rr_se_h",
+        "name": "Restroom SE Handicap",
+        "level": 1,
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-97.0443, 32.89715, 1]
       }
     },
     {

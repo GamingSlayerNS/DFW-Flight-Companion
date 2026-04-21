@@ -152,11 +152,12 @@ class MainActivity : ComponentActivity() {
                 val props = feature.getJSONObject("properties")
                 val geom = feature.getJSONObject("geometry")
                 val type = props.optString("type")
+                val id = props.optString("id")
 
                 if (type == "poi") {
                     val coords = geom.getJSONArray("coordinates")
-                    db.collection("MapNode").add(hashMapOf(
-                        "id" to props.optString("id"),
+                    db.collection("MapNode").document(id).set(hashMapOf(
+                        "id" to id,
                         "terminalId" to "Terminal D",
                         "type" to "poi",
                         "name" to props.optString("name"),
@@ -171,8 +172,8 @@ class MainActivity : ComponentActivity() {
                         val pt = coordsArray.getJSONArray(j)
                         pathPoints.add(GeoPoint(pt.getDouble(1), pt.getDouble(0)))
                     }
-                    db.collection("PathEdge").add(hashMapOf(
-                        "id" to props.optString("id"),
+                    db.collection("PathEdge").document(id).set(hashMapOf(
+                        "id" to id,
                         "type" to "path",
                         "name" to props.optString("name"),
                         "weight" to props.optDouble("weight"),
@@ -191,6 +192,7 @@ class MainActivity : ComponentActivity() {
                 val feature = floorplanFeatures.getJSONObject(i)
                 val props = feature.getJSONObject("properties")
                 val geom = feature.getJSONObject("geometry")
+                val id = props.optString("id")
                 
                 if (geom.getString("type") == "Polygon") {
                     val rings = geom.getJSONArray("coordinates")
@@ -201,8 +203,8 @@ class MainActivity : ComponentActivity() {
                         points.add(GeoPoint(pt.getDouble(1), pt.getDouble(0)))
                     }
                     
-                    db.collection("MapBackground").add(hashMapOf(
-                        "id" to props.optString("id"),
+                    db.collection("MapBackground").document(id).set(hashMapOf(
+                        "id" to id,
                         "type" to props.optString("type"),
                         "name" to props.optString("name"),
                         "level" to props.optInt("level"),

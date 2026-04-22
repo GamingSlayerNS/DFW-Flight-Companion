@@ -170,3 +170,78 @@ exports.getMapNodes = onCall(async (request) => {
     throw new HttpsError("internal", "Failed to fetch MapNodes.");
   }
 });
+
+/**
+ * Admin Function: Pre-computes the navigation graph and saves it as a single document.
+ * This should be called whenever the PathEdge collection is updated.
+ */
+exports.publishNavigationGraph = onCall(async (request) => {
+  try {
+    logger.info("Publishing Navigation Graph...");
+    const snapshot = await db.collection("PathEdge").get();
+
+    const nodePool = [];
+    const graph = {};
+    const MERGE_THRESHOLD = 1e-5;
+
+    const getOrCreateNode = (lat, lng) => {
+      const existing = nodePool.find(n => {
+        const dx = n.lng - lng;
+        const dy = n.lat - lat;
+        return (dx * dx + dy * dy) < (MERGE_THRESHOLD * MERGE_THRESHOLD);
+      });
+      if (existing) return existing;
+      const newNode = { lat, lng };
+      nodePool.push(newNode);
+      return newNode;
+    };
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.type !== "path") return;
+      const coords = data.coordinates || [];
+      for (let i = 0; i < coords.length - 1; i++) {
+        const nodeA = getOrCreateNode(coords[i].latitude, coords[i].longitude);
+        const nodeB = getOrCreateNode(coords[i+1].latitude, coords[i+1].longitude);
+        const keyA = `${nodeA.lng},${nodeA.lat}`;
+        const keyB = `${nodeB.lng},${nodeB.lat}`;
+        if (!graph[keyA]) graph[keyA] = { node: nodeA, neighbors: [] };
+        if (!graph[keyB]) graph[keyB] = { node: nodeB, neighbors: [] };
+        if (!graph[keyA].neighbors.some(n => n.lat === nodeB.lat && n.lng === nodeB.lng)) {
+          graph[keyA].neighbors.push(nodeB);
+        }
+        if (!graph[keyB].neighbors.some(n => n.lat === nodeA.lat && n.lng === nodeA.lng)) {
+          graph[keyB].neighbors.push(nodeA);
+        }
+      }
+    });
+
+    const graphData = Object.values(graph);
+    await db.collection("MapData").doc("currentGraph").set({
+      data: graphData,
+      lastUpdated: Date.now()
+    });
+
+    return { success: true, nodeCount: graphData.length };
+  } catch (error) {
+    logger.error("Error publishing navigation graph:", error);
+    throw new HttpsError("internal", "Failed to publish graph.");
+  }
+});
+
+/**
+ * Client Function: Fetches the pre-computed graph from Firestore.
+ * This is very efficient (1 document read).
+ */
+exports.getNavigationGraph = onCall(async (request) => {
+  try {
+    const doc = await db.collection("MapData").doc("currentGraph").get();
+    if (!doc.exists) {
+      throw new HttpsError("not-found", "Navigation graph has not been published.");
+    }
+    return doc.data().data;
+  } catch (error) {
+    logger.error("Error fetching navigation graph:", error);
+    throw new HttpsError("internal", "Failed to fetch graph.");
+  }
+});

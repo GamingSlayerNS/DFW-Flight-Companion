@@ -159,8 +159,24 @@ fun MapScreen(
     var selectionFromAmenityScreen by remember { mutableStateOf<String?>(null) }
     var cameraBearing by remember { mutableStateOf(0.0) } // tracking the camera angle
 
-    val graph = remember{
-        GraphBuilder.fromGeoJson(context)
+    var graph by remember { mutableStateOf<Map<Node, List<Node>>>(emptyMap()) }
+
+    LaunchedEffect(Unit) {
+        val functions = Firebase.functions
+        // ONLY if testing locally:
+        functions.useEmulator("10.0.2.2", 5001)
+        
+        functions.getHttpsCallable("getNavigationGraph").call()
+            .addOnSuccessListener { result ->
+                @Suppress("UNCHECKED_CAST")
+                val data = result.getData() as? List<Map<String, Any>>
+                if (data != null) {
+                    graph = GraphBuilder.fromFirebase(data)
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e("Navigation", "Failed to fetch graph", e)
+            }
     }
 
     remember {
@@ -213,6 +229,8 @@ fun MapScreen(
     }
 
     fun computeRoute(userLng: Double, userLat: Double, destLng: Double, destLat: Double): List<Node>? {
+        if (graph.isEmpty()) return null
+
         // Find nearest nodes for start location
         val userNode = Node(userLng, userLat)
         val (snappedPoint, a, b) = Pathfinding.findClosestPointOnGraph(userNode, graph)

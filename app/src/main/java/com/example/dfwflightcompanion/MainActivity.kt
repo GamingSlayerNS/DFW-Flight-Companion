@@ -7,8 +7,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
 import com.example.dfwflightcompanion.ui.theme.DFWFlightCompanionTheme
+import com.google.firebase.Firebase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.GeoPoint
+import com.google.firebase.functions.functions
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
@@ -26,9 +28,24 @@ class MainActivity : ComponentActivity() {
                 val shouldInitializeDb = false
                 // SET TO TRUE TO WIPE AND RE-POPULATE RESTROOMS, THEN SET FALSE
                 val shouldInitializeRestrooms = false
+                // SET TO TRUE TO RE-PUBLISH NAVIGATION GRAPH IN BACKEND, THEN SET FALSE
+                val shouldPublishGraph = false
 
                 LaunchedEffect(Unit) {
                     val db = FirebaseFirestore.getInstance()
+
+                    if (shouldPublishGraph) {
+                        statusMessage = "Publishing Navigation Graph..."
+                        Firebase.functions.getHttpsCallable("publishNavigationGraph").call()
+                            .addOnSuccessListener {
+                                Log.d("FirestoreDB", "Navigation graph published successfully")
+                                statusMessage = "Graph Published!"
+                            }
+                            .addOnFailureListener { e ->
+                                Log.e("FirestoreDB", "Failed to publish navigation graph", e)
+                                statusMessage = "Graph Publication Failed!"
+                            }
+                    }
 
                     if (shouldInitializeDb) {
                         statusMessage = "Wiping and Initializing from GeoJSON..."

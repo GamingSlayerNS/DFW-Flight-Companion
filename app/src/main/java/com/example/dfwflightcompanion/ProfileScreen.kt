@@ -2,6 +2,8 @@ package com.example.dfwflightcompanion
 
 import android.util.Log
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
@@ -11,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
 
@@ -22,10 +25,15 @@ data class UserProfile(
 )
 
 @Composable
-fun ProfileScreen() {
+fun ProfileScreen(
+    navController: NavHostController,
+    disabilityProfileViewModel: DisabilityProfileViewModel
+) {
     var profile by remember { mutableStateOf<UserProfile?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val disabilityProfile by disabilityProfileViewModel.profile.collectAsState()
 
     LaunchedEffect(Unit) {
         try {
@@ -62,6 +70,7 @@ fun ProfileScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -80,6 +89,31 @@ fun ProfileScreen() {
         } else {
             Text(text = "No profile found.")
         }
+
+        Spacer(Modifier.height(32.dp))
+
+        Text(
+            text = "Accessibility Profile",
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier
+                .align(Alignment.Start)
+                .padding(bottom = 4.dp)
+        )
+        Text(
+            text = "Stored only on this device — your accessibility information is never shared with anyone or sent to any server.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.Start)
+                .padding(bottom = 12.dp)
+        )
+
+        DisabilityProfileSection(
+            profile = disabilityProfile,
+            onCreate = { navController.navigate(Routes.DISABILITY_PROFILE_FORM) },
+            onEdit = { navController.navigate(Routes.DISABILITY_PROFILE_FORM) },
+            onDelete = { disabilityProfileViewModel.delete() }
+        )
     }
 }
 
@@ -105,6 +139,118 @@ fun ProfileRow(icon: ImageVector, label: String, value: String) {
         Column {
             Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
             Text(text = value, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+@Composable
+private fun DisabilityProfileSection(
+    profile: DisabilityProfile?,
+    onCreate: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (profile == null) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "No accessibility profile yet.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "Create one to get personalized routes and amenity suggestions.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                Button(onClick = onCreate) { Text("Create Disability Profile") }
+            }
+        }
+    } else {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                DisabilityProfileSummary(profile)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
+                        Text("Edit")
+                    }
+                    Button(
+                        onClick = { showDeleteConfirm = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Delete") }
+                }
+            }
+        }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete accessibility profile?") },
+            text = { Text("Your saved preferences will be removed from this device.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDelete()
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun DisabilityProfileSummary(profile: DisabilityProfile) {
+    val lines = buildList {
+        if (profile.usesWheelchair) add("Uses a wheelchair")
+        if (profile.avoidStairs) add("Avoids stairs (prefers elevators)")
+        if (profile.hasVisualImpairment) add("Visual impairment")
+        if (profile.hasHearingImpairment) add("Hearing impairment")
+        if (profile.requiresAccessibleRestroom) add("Requires accessible restroom")
+        if (profile.prefersFamilyRestroom) add("Prefers family restroom")
+        if (profile.restroomGenderPreference != RestroomPreference.ANY) {
+            add("Restroom preference: ${
+                profile.restroomGenderPreference.name.lowercase().replace('_', ' ')
+            }")
+        }
+        add("Route priority: ${profile.routePriority.name.lowercase().replace('_', ' ')}")
+    }
+    Column {
+        if (lines.isEmpty()) {
+            Text(
+                "No preferences selected.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            lines.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+        }
+
+        if (profile.notes.isNotBlank()) {
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Notes",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = profile.notes,
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }

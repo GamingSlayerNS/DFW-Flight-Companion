@@ -11,6 +11,7 @@ import androidx.navigation.navArgument
 object Routes {
     const val AMENITY_DETAILS = "amenity_details/{amenityId}"
     fun amenityDetails(amenityId: String) = "amenity_details/$amenityId"
+    const val DISABILITY_PROFILE_FORM = "disability_profile_form"
 }
 
 @Composable
@@ -18,7 +19,8 @@ fun AppNavHost(
     navController: NavHostController,
     startDestination: Destination,
     modifier: Modifier = Modifier,
-    mapViewModel: MapViewModel
+    mapViewModel: MapViewModel,
+    disabilityProfileViewModel: DisabilityProfileViewModel
 ) {
     NavHost(
         navController = navController,
@@ -38,7 +40,10 @@ fun AppNavHost(
             )
         }
         composable(Destination.PROFILE.route) {
-            ProfileScreen()
+            ProfileScreen(
+                navController = navController,
+                disabilityProfileViewModel = disabilityProfileViewModel
+            )
         }
         composable(
             route = Routes.AMENITY_DETAILS,
@@ -49,6 +54,12 @@ fun AppNavHost(
                 amenityId = amenityId,
                 navController = navController,
                 mapViewModel = mapViewModel
+            )
+        }
+        composable(Routes.DISABILITY_PROFILE_FORM) {
+            DisabilityProfileFormScreen(
+                navController = navController,
+                disabilityProfileViewModel = disabilityProfileViewModel
             )
         }
     }

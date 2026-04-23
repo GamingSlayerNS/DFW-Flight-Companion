@@ -26,11 +26,10 @@ fun BottomNavigationBar(modifier: Modifier = Modifier) {
                     NavigationBarItem(
                         selected = currentRoute == destination.route,
                         onClick = {
-                            if (currentRoute == destination.route) {
-                                if (destination == Destination.MAP) {
-                                    mapViewModel.selectAmenity(null)
-                                }
-                            } else {
+                            if (destination != Destination.MAP) {
+                                mapViewModel.selectAmenity(null)
+                            }
+                            if (currentRoute != destination.route) {
                                 navController.navigate(destination.route) {
                                     popUpTo(navController.graph.startDestinationId)
                                     launchSingleTop = true

@@ -27,4 +27,11 @@ class MapViewModel : ViewModel() {
             )
         }
     }
+
+    var autoStartNavigation by mutableStateOf(false)
+        private set
+
+    fun requestAutoStartNavigation(enabled: Boolean) {
+        autoStartNavigation = enabled
+    }
 }

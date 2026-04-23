@@ -511,21 +511,46 @@ fun MapScreen(
                     if (amenityScreenSelectionNode != null) {
                         val nodeLat = amenityScreenSelectionNode.latitude
                         val nodeLng = amenityScreenSelectionNode.longitude
-                        mapRef.value?.animateCamera(
-                            CameraUpdateFactory.newCameraPosition(
-                                CameraPosition.Builder()
-                                    .target(LatLng(nodeLat, nodeLng))
-                                    .zoom(19.0)
-                                    .bearing(180.0)   // Face south
-                                    .tilt(45.0)
-                                    .build()
-                            )
-                        )
                         selectedDest = Pair(nodeLng, nodeLat)
                         currentDestination = Pair(nodeLng, nodeLat)
+                        selectedAmenity = amenity
+
+                        if (mapViewModel.autoStartNavigation) {
+                            showAmenityBox = false
+
+                            mapRef.value?.animateCamera(
+                                CameraUpdateFactory.newCameraPosition(
+                                    CameraPosition.Builder()
+                                        .target(LatLng(nodeLat, nodeLng))
+                                        .zoom(18.0)
+                                        .bearing(180.0)   // Face south, same as the marker-click path
+                                        .tilt(45.0)
+                                        .build()
+                                ),
+                                1000
+                            )
+
+                            delay(1000)
+
+                            startNavigation(nodeLng, nodeLat)
+                            mapViewModel.requestAutoStartNavigation(false)
+                        } else {
+                            mapRef.value?.animateCamera(
+                                CameraUpdateFactory.newCameraPosition(
+                                    CameraPosition.Builder()
+                                        .target(LatLng(nodeLat, nodeLng))
+                                        .zoom(19.0)
+                                        .bearing(180.0)
+                                        .tilt(45.0)
+                                        .build()
+                                )
+                            )
+                            showAmenityBox = true
+                        }
+                    } else {
+                        selectedAmenity = amenity
+                        showAmenityBox = !mapViewModel.autoStartNavigation
                     }
-                    selectedAmenity = amenity
-                    showAmenityBox = true
                 }
             }
         }

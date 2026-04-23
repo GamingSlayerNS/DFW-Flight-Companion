@@ -170,3 +170,32 @@ exports.getMapNodes = onCall(async (request) => {
     throw new HttpsError("internal", "Failed to fetch MapNodes.");
   }
 });
+
+/**
+ * Fetches a single amenity by its document id.
+ */
+exports.getAmenityById = onCall(async (request) => {
+  const { amenityId } = request.data;
+
+  if (!amenityId) {
+    throw new HttpsError("invalid-argument", "amenityId is required.");
+  }
+
+  try {
+    logger.info(`Fetching amenity ${amenityId} from Firestore...`);
+    const doc = await db.collection("Amenity").doc(amenityId).get();
+
+    if (!doc.exists) {
+      throw new HttpsError("not-found", `Amenity ${amenityId} not found.`);
+    }
+
+    return {
+      id: doc.id,
+      ...doc.data()
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Error fetching amenity by id:", error);
+    throw new HttpsError("internal", "Failed to fetch amenity.");
+  }
+});

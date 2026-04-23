@@ -17,6 +17,7 @@ fun BottomNavigationBar(modifier: Modifier = Modifier) {
     val mapViewModel: MapViewModel = viewModel() // Shared ViewModel between screens
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val disabilityProfileViewModel: DisabilityProfileViewModel = viewModel()
 
     Scaffold(
         modifier = modifier,
@@ -52,7 +53,8 @@ fun BottomNavigationBar(modifier: Modifier = Modifier) {
             navController = navController,
             startDestination = startDestination,
             modifier = Modifier.padding(contentPadding),
-            mapViewModel = mapViewModel
+            mapViewModel = mapViewModel,
+            disabilityProfileViewModel = disabilityProfileViewModel
         )
     }
 }

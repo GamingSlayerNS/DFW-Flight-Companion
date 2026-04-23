@@ -63,4 +63,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     implementation("org.maplibre.gl:android-sdk:11.6.1-vulkan-pre1")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
 }

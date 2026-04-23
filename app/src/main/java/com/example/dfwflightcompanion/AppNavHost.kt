@@ -3,8 +3,15 @@ package com.example.dfwflightcompanion
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+
+object Routes {
+    const val AMENITY_DETAILS = "amenity_details/{amenityId}"
+    fun amenityDetails(amenityId: String) = "amenity_details/$amenityId"
+}
 
 @Composable
 fun AppNavHost(
@@ -32,6 +39,17 @@ fun AppNavHost(
         }
         composable(Destination.PROFILE.route) {
             ProfileScreen()
+        }
+        composable(
+            route = Routes.AMENITY_DETAILS,
+            arguments = listOf(navArgument("amenityId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val amenityId = backStackEntry.arguments?.getString("amenityId") ?: return@composable
+            AmenityDetailsScreen(
+                amenityId = amenityId,
+                navController = navController,
+                mapViewModel = mapViewModel
+            )
         }
     }
 }

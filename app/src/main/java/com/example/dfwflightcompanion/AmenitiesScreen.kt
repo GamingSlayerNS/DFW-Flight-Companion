@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 
@@ -123,49 +124,75 @@ fun AmenityCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
+            /*.clickable {
                 mapViewModel.selectAmenity(amenity.id)
                 navController.navigate(Destination.MAP.route)
-            },
+            }*/,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = amenity.name,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = "${amenity.type}${if (amenity.subType.isNotEmpty()) " - ${amenity.subType}" else ""}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Gray
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Place,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = Color.Gray
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = amenity.name,
+                        style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = " Node: ${amenity.nodeId}",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "${amenity.type}${if (amenity.subType.isNotEmpty()) " - ${amenity.subType}" else ""}",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = Color.Gray
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Place,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Color.Gray
+                        )
+                        Text(
+                            text = " Node: ${amenity.nodeId}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
+
+                if (amenity.isAccessible) {
+                    Icon(
+                        imageVector = Icons.Default.Accessible,
+                        contentDescription = "Accessible",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
-            
-            if (amenity.isAccessible) {
-                Icon(
-                    imageVector = Icons.Default.Accessible,
-                    contentDescription = "Accessible",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ){
+                OutlinedButton(
+                    onClick = {
+                        navController.navigate(Routes.amenityDetails(amenity.id))
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Details")
+                }
+
+                Button(
+                    onClick = {
+                        mapViewModel.selectAmenity(amenity.id)
+                        navController.navigate(Destination.MAP.route)
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Locate Amenity")
+                }
             }
         }
     }

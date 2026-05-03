@@ -34,7 +34,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -46,6 +50,7 @@ import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
@@ -53,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -166,6 +172,7 @@ fun MapScreen(
     var wheelchair by remember { mutableStateOf(false) }
     var mens by remember { mutableStateOf(false) }
     var womens by remember { mutableStateOf(false) }
+    var amenityStatus by remember { mutableStateOf<String?>(null) }
 
     var selectionFromAmenityScreen by remember { mutableStateOf<String?>(null) }
     var cameraBearing by remember { mutableStateOf(0.0) } // tracking the camera angle
@@ -348,6 +355,56 @@ fun MapScreen(
         }
     }
 
+    fun applyCustomFilters() {
+        val filtered = amenities.filter { amenity ->
+            val matchesWheelchair = wheelchair && amenity.subType.equals("Handicap", true)
+            val matchesMens = mens && amenity.subType.equals("Male", true)
+            val matchesWomens = womens && amenity.subType.equals("Female", true)
+
+            val typeMatch = (!mens && !womens && !wheelchair) || (matchesMens || matchesWomens || matchesWheelchair)
+            val statusMatch = when (amenityStatus) {
+                "open" -> amenity.isAccessible
+                "closed" -> !amenity.isAccessible
+                else -> true   // null → when no status filter applied
+            }
+            typeMatch && statusMatch
+        }
+
+        val filteredFeatures = filtered.mapNotNull { amenity ->
+            val node = mapNodes.find { it.id == amenity.nodeId }
+            if (node == null) {
+                Log.e("DEBUG", "No node found for amenity ${amenity.id} nodeId=${amenity.nodeId}")
+                return@mapNotNull null
+            }
+
+            Feature.fromGeometry(
+                Point.fromLngLat(node.longitude, node.latitude)
+            ).apply {
+                addStringProperty("id", amenity.id)
+                addStringProperty("name", amenity.name)
+                addStringProperty("type", amenity.type)
+                addStringProperty("subType", amenity.subType)
+                addStringProperty("congestion", amenity.congestion)
+                addNumberProperty("lastUpdated", amenity.lastUpdated)
+                addBooleanProperty("isAccessible", amenity.isAccessible)
+                addStringProperty("nodeId", amenity.nodeId)
+            }
+        }
+
+        mapRef.value?.style?.getSourceAs<GeoJsonSource>("amenity-source")
+            ?.setGeoJson(FeatureCollection.fromFeatures(filteredFeatures))
+        mapRef.value?.style?.getLayer("marker-layer")
+            ?.setProperties(visibility(Property.NONE))
+    }
+
+    fun resetFilterTypes() {
+        mens = false
+        womens = false
+        wheelchair = false
+        amenityStatus = null
+        applyCustomFilters()
+    }
+
     // Function to simulate navigation
     val startNavigation = startNav@{ destLng: Double, destLat: Double ->
         isNavigating = true
@@ -371,6 +428,9 @@ fun MapScreen(
         currentStepIndex = 0
         lastSegmentIndex = -1
         updateNavigationStep(destLng, destLat)
+
+        // reset custom filter values
+        resetFilterTypes()
 
         // Convert to GeoJSON coordinates
         val coordinates = path.joinToString(","){
@@ -706,46 +766,6 @@ fun MapScreen(
         updateUserLocation(newLng, newLat)
     }
 
-    fun applyCustomFilters() {
-        val filtered = amenities.filter { amenity ->
-            val matchesWheelchair = wheelchair && amenity.subType.equals("Handicap", true)
-            val matchesMens = mens && amenity.subType.equals("Male", true)
-            val matchesWomens = womens && amenity.subType.equals("Female", true)
-
-            if (!wheelchair && !mens && !womens) {
-                true
-            } else {
-                matchesWheelchair || matchesMens || matchesWomens
-            }
-        }
-
-        val filteredFeatures = filtered.mapNotNull { amenity ->
-            val node = mapNodes.find { it.id == amenity.nodeId }
-            if (node == null) {
-                Log.e("DEBUG", "No node found for amenity ${amenity.id} nodeId=${amenity.nodeId}")
-                return@mapNotNull null
-            }
-
-            Feature.fromGeometry(
-                Point.fromLngLat(node.longitude, node.latitude)
-            ).apply {
-                addStringProperty("id", amenity.id)
-                addStringProperty("name", amenity.name)
-                addStringProperty("type", amenity.type)
-                addStringProperty("subType", amenity.subType)
-                addStringProperty("congestion", amenity.congestion)
-                addNumberProperty("lastUpdated", amenity.lastUpdated)
-                addBooleanProperty("isAccessible", amenity.isAccessible)
-                addStringProperty("nodeId", amenity.nodeId)
-            }
-        }
-
-        mapRef.value?.style?.getSourceAs<GeoJsonSource>("amenity-source")
-            ?.setGeoJson(FeatureCollection.fromFeatures(filteredFeatures))
-        mapRef.value?.style?.getLayer("marker-layer")
-            ?.setProperties(visibility(Property.NONE))
-    }
-
     val filterButtonPadding = if (cameraBearing in 0.0000000001..359.9999999999) {
         Modifier.padding(top = 56.dp, end = 6.dp)   // facing off-north
     } else {
@@ -997,92 +1017,194 @@ fun MapScreen(
 
         // AlertDialog with Checkboxes
         if (showFilterDialog) {
-            var tempWheelchair by remember { mutableStateOf(wheelchair) }
-            var tempMens by remember { mutableStateOf(mens) }
-            var tempWomens by remember { mutableStateOf(womens) }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(androidx.compose.ui.graphics.Color.White)
+                    .zIndex(10f) // ensure it sits above the map
+                    .padding(24.dp)
+            ) {
+                var tempWheelchair by remember { mutableStateOf(wheelchair) }
+                var tempMens by remember { mutableStateOf(mens) }
+                var tempWomens by remember { mutableStateOf(womens) }
+                var tempStatus by remember { mutableStateOf(amenityStatus) }
 
-            AlertDialog(
-                onDismissRequest = { showFilterDialog = false },
-                title = {
-                    Text(
-                        "Custom Preferences",
-                        modifier = Modifier.padding(top = 12.dp)
-                    )
-                },
-                text = {
-                    Column {
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable {
-                                tempWheelchair = !tempWheelchair
-                            }
-                        ) {
-                            Checkbox(
-                                checked = tempWheelchair,
-                                onCheckedChange = { tempWheelchair = it }
-                            )
-                            Text("Wheelchair Accessible")
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable {
-                                tempMens = !tempMens
-                            }
-                        ) {
-                            Checkbox(
-                                checked = tempMens,
-                                onCheckedChange = { tempMens = it }
-                            )
-                            Text("Men's Restrooms")
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable {
-                                tempWomens = !tempWomens
-                            }
-                        ) {
-                            Checkbox(
-                                checked = tempWomens,
-                                onCheckedChange = { tempWomens = it }
-                            )
-                            Text("Women's Restrooms")
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showAmenityBox = false
-                        showFilterDialog = false
-                        wheelchair = tempWheelchair
-                        mens = tempMens
-                        womens = tempWomens
-
-                        applyCustomFilters()
-
-                        // Reset camera to normal
-                        mapRef.value?.animateCamera(
-                            CameraUpdateFactory.newCameraPosition(
-                                CameraPosition.Builder()
-                                    .target(initialCameraPosition)
-                                    .zoom(16.0)
-                                    .bearing(0.0)
-                                    .tilt(0.0)
-                                    .build()
-                            ), 2000
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clickable { showFilterDialog = false }
                         )
-                    }) {
-                        Text("Apply")
+
+                        Text(
+                            "Custom Filters",
+                            modifier = Modifier.padding(end = 70.dp),
+                            fontFamily = FontFamily(Font(R.font.barlowcondensed_semibold, FontWeight.SemiBold)),
+                            fontSize = 30.sp
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .background(androidx.compose.ui.graphics.Color.Black, shape = RoundedCornerShape(8.dp))
+                                .clickable {
+                                    // Reset all filters
+                                    tempWheelchair = false
+                                    tempMens = false
+                                    tempWomens = false
+                                    tempStatus = null
+                                }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "Reset",
+                                color = androidx.compose.ui.graphics.Color.White,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showFilterDialog = false }) {
-                        Text("Cancel")
+
+                    HorizontalDivider(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        thickness = 1.dp,
+                        color = androidx.compose.ui.graphics.Color.LightGray
+                    )
+
+                    // Checkboxes
+                    Text(
+                        text = "Restroom Types",
+                        fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)),
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempWheelchair = !tempWheelchair }
+                    ) {
+                        Checkbox(
+                            checked = tempWheelchair,
+                            onCheckedChange = { tempWheelchair = it }
+                        )
+                        Text("Wheelchair Accessible")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempMens = !tempMens }
+                    ) {
+                        Checkbox(
+                            checked = tempMens,
+                            onCheckedChange = { tempMens = it }
+                        )
+                        Text("Men's Restrooms")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempWomens = !tempWomens }
+                    ) {
+                        Checkbox(
+                            checked = tempWomens,
+                            onCheckedChange = { tempWomens = it }
+                        )
+                        Text("Women's Restrooms")
+                    }
+                    Text(
+                        text = "Restroom Status",
+                        fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)),
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                tempStatus = if (tempStatus == "open") null else "open"
+                            }
+                    ) {
+                        RadioButton(
+                            selected = tempStatus == "open",
+                            onClick = {
+                                tempStatus = if (tempStatus == "open") null else "open"
+                            }
+                        )
+                        Text("Open")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                tempStatus = if (tempStatus == "closed") null else "closed"
+                            }
+                    ) {
+                        RadioButton(
+                            selected = tempStatus == "closed",
+                            onClick = {
+                                tempStatus = if (tempStatus == "closed") null else "closed"
+                            }
+                        )
+                        Text("Closed")
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    // Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(androidx.compose.ui.graphics.Color.Black, shape = RoundedCornerShape(10.dp))
+                                .clickable {
+                                    showAmenityBox = false
+                                    showFilterDialog = false
+
+                                    wheelchair = tempWheelchair
+                                    mens = tempMens
+                                    womens = tempWomens
+                                    amenityStatus = tempStatus
+
+                                    applyCustomFilters()
+
+                                    mapRef.value?.animateCamera(
+                                        CameraUpdateFactory.newCameraPosition(
+                                            CameraPosition.Builder()
+                                                .target(initialCameraPosition)
+                                                .zoom(16.0)
+                                                .bearing(0.0)
+                                                .tilt(0.0)
+                                                .build()
+                                        ), 2000
+                                    )
+                                }
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Apply Filters",
+                                color = androidx.compose.ui.graphics.Color.White,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
                     }
                 }
-            )
+            }
         }
 
         // Stop Navigation Button

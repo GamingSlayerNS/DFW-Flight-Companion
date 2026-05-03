@@ -11,9 +11,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +48,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
@@ -58,6 +61,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
+import kotlin.math.acos
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -126,6 +135,8 @@ fun formatTimeAgo(timestamp: Long): String {
     }
 }
 
+private var lastSegmentIndex: Int = -1
+
 @Composable
 fun MapScreen(
     navController: NavHostController,
@@ -158,6 +169,12 @@ fun MapScreen(
 
     var selectionFromAmenityScreen by remember { mutableStateOf<String?>(null) }
     var cameraBearing by remember { mutableStateOf(0.0) } // tracking the camera angle
+    var currentStepIndex by remember { mutableStateOf(0) }
+    var currentDirections by remember { mutableStateOf<List<String>>(emptyList()) }
+    var turnSegments by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var currentNavInstruction by remember { mutableStateOf("") }
+    var currentNavDistanceToTurn by remember { mutableStateOf("") }
+    var navPath by remember { mutableStateOf<List<Node>>(emptyList()) }
 
     var graph by remember { mutableStateOf<Map<Node, List<Node>>>(emptyMap()) }
 
@@ -266,6 +283,71 @@ fun MapScreen(
         return pathNodes
     }
 
+    // Re-compute the navigation path to display updated navigation instructions when user goes off-route
+    fun reroute(destLng: Double, destLat: Double) {
+        val userLng = userLocation.value.longitude
+        val userLat = userLocation.value.latitude
+        val newPath = computeRoute(userLng, userLat, destLng, destLat)
+
+        if (newPath.isNullOrEmpty()) {
+            Log.e("NAV", "Reroute failed: no path returned")
+            return
+        }
+
+        // Replace navPath with the UI path
+        navPath = newPath
+        val (newDirections, newTurnSegments) = generateDirections(newPath)
+        currentDirections = newDirections
+        turnSegments = newTurnSegments
+        currentStepIndex = 0
+        lastSegmentIndex = -1
+
+        if (currentDirections.isNotEmpty() && turnSegments.isNotEmpty()) {
+            val firstTurnSegment = turnSegments[0]
+            val turnNode = newPath[firstTurnSegment]
+            val distanceToTurn = haversine(userLat,userLng,turnNode.lat,turnNode.lng).roundToInt()
+            currentNavInstruction = currentDirections[0]
+            currentNavDistanceToTurn = "${distanceToTurn}ft"
+        } else {
+            currentNavInstruction = "Continue"
+            currentNavDistanceToTurn = "—"
+        }
+    }
+
+    fun updateNavigationStep(destLng: Double, destLat: Double) {
+        val currPath = navPath
+
+        val userLng = userLocation.value.longitude
+        val userLat = userLocation.value.latitude
+
+        val userNode = Node(userLng, userLat)
+        Log.d("NAV", "userNode: $userNode")
+        val segmentIndex = findClosestSegmentIndex(userNode, currPath)
+
+        // OFF-ROUTE DETECTION
+        if ((lastSegmentIndex != -1 && segmentIndex < lastSegmentIndex) || (distanceToSegment(userNode,currPath[segmentIndex],currPath[segmentIndex + 1]) > 4.0)) {
+            reroute(destLng, destLat)
+            return
+        }
+        lastSegmentIndex = segmentIndex
+
+        if (currentStepIndex < currentDirections.size) {
+            var turnSegmentIndex = turnSegments[currentStepIndex]
+
+            if (segmentIndex >= turnSegmentIndex) {
+                currentStepIndex++
+                turnSegmentIndex = turnSegments[currentStepIndex]
+                Log.d("NAV", "Next instruction: ${currentDirections[currentStepIndex]}.")
+            }
+
+            val turnNode = currPath[turnSegmentIndex]
+            val distanceToTurn = haversine(userLat, userLng, turnNode.lat, turnNode.lng).roundToInt()
+            Log.d("NAV", "In $distanceToTurn meters, ${currentDirections[currentStepIndex]}.")
+            currentNavInstruction = currentDirections[currentStepIndex]
+            currentNavDistanceToTurn = "${distanceToTurn}ft"
+        }
+    }
+
     // Function to simulate navigation
     val startNavigation = startNav@{ destLng: Double, destLat: Double ->
         isNavigating = true
@@ -280,6 +362,15 @@ fun MapScreen(
 
         // Calculate the route path
         val path = computeRoute(userLng, userLat, destLng, destLat) ?: return@startNav
+
+        // Generate directions
+        val (directions, segments) = generateDirections(path)
+        currentDirections = directions
+        turnSegments = segments
+        navPath = path
+        currentStepIndex = 0
+        lastSegmentIndex = -1
+        updateNavigationStep(destLng, destLat)
 
         // Convert to GeoJSON coordinates
         val coordinates = path.joinToString(","){
@@ -413,8 +504,8 @@ fun MapScreen(
                     if (geometry is Point) {
                         val destLng = geometry.longitude()
                         val destLat = geometry.latitude()
-                        currentDestination = Pair(destLng, destLat)
-                        selectedDest = Pair(destLng, destLat)   // store destination
+                        // currentDestination = Pair(destLng, destLat)
+                        selectedDest = Pair(destLng, destLat)   // store selected destination
                         showAmenityBox = true
                         // startNavigation(destLng, destLat)
                         map.animateCamera(
@@ -450,6 +541,10 @@ fun MapScreen(
 
         // Calculate the route path
         val path = computeRoute(userLng, userLat, destLng, destLat) ?: return
+
+        if (isNavigating) {
+            updateNavigationStep(destLng, destLat)
+        }
 
         // Turn path into coordinates and add to map
         val coordinates = path.joinToString(",") {
@@ -750,7 +845,32 @@ fun MapScreen(
                             .size(36.dp)
                             .clip(CircleShape)
                             .background(androidx.compose.ui.graphics.Color.Gray)
-                            .clickable { showAmenityBox = false },
+                            .clickable {
+                                showAmenityBox = false
+                                if (isNavigating) {
+                                    mapRef.value?.animateCamera(
+                                        CameraUpdateFactory.newCameraPosition(
+                                            CameraPosition.Builder()
+                                                .target(userLocation.value)
+                                                .zoom(18.0)
+                                                .bearing(mapRef.value?.cameraPosition?.bearing ?: 0.0)
+                                                .tilt(45.0)
+                                                .build()
+                                        ),2000
+                                    )
+                                } else {
+                                    mapRef.value?.animateCamera(
+                                        CameraUpdateFactory.newCameraPosition(
+                                            CameraPosition.Builder()
+                                                .target(initialCameraPosition)
+                                                .zoom(16.0)
+                                                .bearing(0.0)
+                                                .tilt(0.0)
+                                                .build()
+                                        ), 2000
+                                    )
+                                }
+                            },
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
@@ -856,6 +976,7 @@ fun MapScreen(
                                     selectedDest?.let { (lng, lat) ->
                                         startNavigation(lng, lat)
                                     }
+                                    currentDestination = selectedDest
                                 }
                             ) {
                                 Icon(
@@ -979,6 +1100,79 @@ fun MapScreen(
                     Icon(Icons.Default.Close, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Stop Navigation", fontWeight = FontWeight.Bold)
+                }
+            }
+            if (currentNavInstruction.isNotEmpty() && !showAmenityBox) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .padding(bottom = 12.dp)
+                        .align(Alignment.BottomCenter)
+                        .padding(top = 32.dp)
+                        .background(androidx.compose.ui.graphics.Color(0xFF00008B).copy(alpha = 0.9f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            val iconRes = when {
+                                currentNavInstruction.contains("right", ignoreCase = true) ->
+                                    R.drawable.right_turn_arrow
+                                currentNavInstruction.contains("left", ignoreCase = true) ->
+                                    R.drawable.left_turn_arrow
+                                else ->
+                                    R.drawable.arrived_icon
+                            }
+
+                            Image(
+                                painter = painterResource(id = iconRes),
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp)
+                            )
+
+                            Text(
+                                text = currentNavDistanceToTurn,
+                                color = androidx.compose.ui.graphics.Color.White,
+                                fontSize = 24.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(20.dp))
+
+                        Text(
+                            text = currentNavInstruction,
+                            color = androidx.compose.ui.graphics.Color.White,
+                            fontSize = 32.sp,
+                            modifier = Modifier.weight(1f),
+                            style = TextStyle(
+                                lineHeight = 32.sp // increase this for more spacing
+                            )
+                        )
+
+                        Column(
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(end = 6.dp)
+                                    .background(androidx.compose.ui.graphics.Color(0xffdd0d3c), RoundedCornerShape(12.dp))
+                                    .clickable { cancelNavigation() }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "End",
+                                    color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1149,6 +1343,121 @@ private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean 
     }
 
     return intersects
+}
+
+private fun angleBetween(a: Node, b: Node, c: Node): Double {
+    val v1x = b.lng - a.lng
+    val v1y = b.lat - a.lat
+    val v2x = c.lng - b.lng
+    val v2y = c.lat - b.lat
+
+    val dot = v1x * v2x + v1y * v2y
+    val mag1 = sqrt(v1x * v1x + v1y * v1y)
+    val mag2 = sqrt(v2x * v2x + v2y * v2y)
+
+    val cos = (dot / (mag1 * mag2)).coerceIn(-1.0, 1.0)
+    return Math.toDegrees(acos(cos))
+}
+
+private fun generateDirections(path: List<Node>): Pair<List<String>, List<Int>> {
+    val directions = mutableListOf<String>()
+    val segments = mutableListOf<Int>()
+
+    for (i in 1 until path.size - 1) {
+        val a = path[i - 1]
+        val b = path[i]
+        val c = path[i + 1]
+
+        val angle = angleBetween(a, b, c)
+
+        val instruction = when {
+            angle > 150 -> "Make a U-turn"
+            angle > 30 && angle <= 150 -> {
+                val cross = (b.lng - a.lng) * (c.lat - b.lat) -
+                        (b.lat - a.lat) * (c.lng - b.lng)
+                if (cross > 0) "Turn left" else "Turn right"
+            }
+            else -> null
+        }
+
+        if (instruction != null) {
+            directions.add(instruction)
+            segments.add(i)
+        }
+    }
+
+    directions.add("Arrive at destination")
+    segments.add(path.size - 1)
+
+    return directions to segments
+}
+
+private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+
+    val a = sin(dLat / 2).pow(2.0) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2.0)
+
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    return 6371000.0 * c
+}
+
+private fun distanceToSegment(p: Node, a: Node, b: Node): Double {
+    // Convert to vectors
+    val px = p.lng
+    val py = p.lat
+    val ax = a.lng
+    val ay = a.lat
+    val bx = b.lng
+    val by = b.lat
+
+    // Segment vector
+    val abx = bx - ax
+    val aby = by - ay
+
+    // Handle degenerate segment (a == b)
+    val abLenSq = abx * abx + aby * aby
+    if (abLenSq == 0.0) {
+        return haversine(py, px, ay, ax)
+    }
+
+    // Project point p onto segment AB (normalized t from 0 to 1)
+    val apx = px - ax
+    val apy = py - ay
+    var t = (apx * abx + apy * aby) / abLenSq
+
+    // Clamp projection to segment endpoints
+    t = t.coerceIn(0.0, 1.0)
+
+    // Closest point on segment
+    val closestX = ax + t * abx
+    val closestY = ay + t * aby
+
+    // Return distance in meters
+    return haversine(py, px, closestY, closestX)
+}
+
+private fun findClosestSegmentIndex(user: Node, path: List<Node>): Int {
+    var bestIndex = 0
+    var bestDist = Double.MAX_VALUE
+
+    for (i in 0 until path.size - 1) {
+        val a = path[i]
+        val b = path[i + 1]
+        val projected = Pathfinding.closestPointOnSegment(user, a, b)
+
+        val dx = projected.lng - user.lng
+        val dy = projected.lat - user.lat
+        val dist = dx*dx + dy*dy
+
+        if (dist < bestDist) {
+            bestDist = dist
+            bestIndex = i
+        }
+    }
+
+    return bestIndex
 }
 
 private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityDetail>, mapNodes: MutableList<MapNode>, mapViewModel: MapViewModel) {

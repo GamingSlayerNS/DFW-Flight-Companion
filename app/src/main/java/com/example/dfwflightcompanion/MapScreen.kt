@@ -289,8 +289,8 @@ fun MapScreen(
         val userLat = userLocation.value.latitude
         val newPath = computeRoute(userLng, userLat, destLng, destLat)
 
-        if (newPath.isNullOrEmpty()) {
-            Log.e("NAV", "Reroute failed: no path returned")
+        if (newPath.isNullOrEmpty() || newPath.size < 2) {
+            Log.e("NAV", "Reroute failed: path too short (size=${newPath?.size})")
             return
         }
 
@@ -316,14 +316,16 @@ fun MapScreen(
 
     fun updateNavigationStep(destLng: Double, destLat: Double) {
         val currPath = navPath
+        if (currPath.isEmpty()) return
 
         val userLng = userLocation.value.longitude
         val userLat = userLocation.value.latitude
 
         val userNode = Node(userLng, userLat)
-        Log.d("NAV", "userNode: $userNode")
         val segmentIndex = findClosestSegmentIndex(userNode, currPath)
-
+        if (currPath.size < 2 || segmentIndex >= currPath.lastIndex) {
+            return
+        }
         // OFF-ROUTE DETECTION
         if ((lastSegmentIndex != -1 && segmentIndex < lastSegmentIndex) || (distanceToSegment(userNode,currPath[segmentIndex],currPath[segmentIndex + 1]) > 4.0)) {
             reroute(destLng, destLat)
@@ -337,12 +339,10 @@ fun MapScreen(
             if (segmentIndex >= turnSegmentIndex) {
                 currentStepIndex++
                 turnSegmentIndex = turnSegments[currentStepIndex]
-                Log.d("NAV", "Next instruction: ${currentDirections[currentStepIndex]}.")
             }
 
             val turnNode = currPath[turnSegmentIndex]
             val distanceToTurn = haversine(userLat, userLng, turnNode.lat, turnNode.lng).roundToInt()
-            Log.d("NAV", "In $distanceToTurn meters, ${currentDirections[currentStepIndex]}.")
             currentNavInstruction = currentDirections[currentStepIndex]
             currentNavDistanceToTurn = "${distanceToTurn}ft"
         }
@@ -758,30 +758,32 @@ fun MapScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Custom Filter Button
-        Box(
-            modifier = filterButtonPadding
-                .size(54.dp)
-                .align(Alignment.TopEnd)
-                .border(
-                    width = 1.dp,
-                    color = androidx.compose.ui.graphics.Color.Black,
-                    shape = CircleShape
+        // Custom Filter Button (displayed only when not navigating)
+        if (!isNavigating) {
+            Box(
+                modifier = filterButtonPadding
+                    .size(54.dp)
+                    .align(Alignment.TopEnd)
+                    .border(
+                        width = 1.dp,
+                        color = androidx.compose.ui.graphics.Color.Black,
+                        shape = CircleShape
+                    )
+                    .background(
+                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f),
+                        shape = CircleShape
+                    )
+                    .clickable {
+                        showFilterDialog = true
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.filter_icon),
+                    contentDescription = "Filter",
+                    tint = androidx.compose.ui.graphics.Color.Black
                 )
-                .background(
-                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f),
-                    shape = CircleShape
-                )
-                .clickable {
-                    showFilterDialog = true
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.filter_icon),
-                contentDescription = "Filter",
-                tint = androidx.compose.ui.graphics.Color.Black
-            )
+            }
         }
 
         // View Amenity Details Box

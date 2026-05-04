@@ -398,10 +398,16 @@ fun MapScreen(
             if (wheelchairFilter) "Handicap" else null
         )
         val nearestByType: List<AmenityDetail> = if (nearestAvailableFilter) {
-            selectedTypes.mapNotNull { type ->
-                filtered
-                    .filter { it.subType.equals(type, true) && it.isAccessible }
-                    .minByOrNull { distanceToUser(it) }
+            if (selectedTypes.isNotEmpty()) {
+                selectedTypes.mapNotNull { type ->
+                    filtered
+                        .filter { it.subType.equals(type, true) && it.isAccessible }
+                        .minByOrNull { distanceToUser(it) }
+                }
+            } else {
+                listOfNotNull(filtered
+                    .filter { it.isAccessible }
+                    .minByOrNull { distanceToUser(it) })
             }
         } else { filtered }
 

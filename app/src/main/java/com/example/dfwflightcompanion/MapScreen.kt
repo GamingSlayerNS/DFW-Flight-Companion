@@ -5,6 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,7 +37,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -63,7 +65,6 @@ import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
@@ -98,7 +99,6 @@ import org.maplibre.geojson.Point
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.LineString
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 import kotlinx.coroutines.delay
 
 enum class Direction {
@@ -169,10 +169,16 @@ fun MapScreen(
     var showFilterDialog by remember { mutableStateOf(false) }
 
     // Custom Filter Checkbox states
-    var wheelchair by remember { mutableStateOf(false) }
-    var mens by remember { mutableStateOf(false) }
-    var womens by remember { mutableStateOf(false) }
-    var amenityStatus by remember { mutableStateOf<String?>(null) }
+    var wheelchairFilter by remember { mutableStateOf(false) }
+    var mensFilter by remember { mutableStateOf(false) }
+    var womensFilter by remember { mutableStateOf(false) }
+    var amenityStatusFilter by remember { mutableStateOf<String?>(null) }
+    var lowCrowdLvlFilter by remember { mutableStateOf(false) }
+    var mediumCrowdLvlFilter by remember { mutableStateOf(false) }
+    var highCrowdLvlFilter by remember { mutableStateOf(false) }
+    var nearestAvailableFilter by remember { mutableStateOf(false) }
+
+    var noFilteringResultsFound by remember { mutableStateOf(false) }
 
     var selectionFromAmenityScreen by remember { mutableStateOf<String?>(null) }
     var cameraBearing by remember { mutableStateOf(0.0) } // tracking the camera angle
@@ -355,22 +361,60 @@ fun MapScreen(
         }
     }
 
-    fun applyCustomFilters() {
-        val filtered = amenities.filter { amenity ->
-            val matchesWheelchair = wheelchair && amenity.subType.equals("Handicap", true)
-            val matchesMens = mens && amenity.subType.equals("Male", true)
-            val matchesWomens = womens && amenity.subType.equals("Female", true)
+    // calculates the distance of the computed route from user to a selected amenity
+    fun distanceToUser(amenity: AmenityDetail): Double {
+        val userLng = userLocation.value.longitude
+        val userLat = userLocation.value.latitude
+        val selectedRR = mapNodes.find { it.id == amenity.nodeId } ?: return Double.POSITIVE_INFINITY
+        val route = computeRoute(userLng, userLat,selectedRR.longitude,selectedRR.latitude) ?: return Double.POSITIVE_INFINITY
 
-            val typeMatch = (!mens && !womens && !wheelchair) || (matchesMens || matchesWomens || matchesWheelchair)
-            val statusMatch = when (amenityStatus) {
+        return pathLength(route)
+    }
+
+    fun applyCustomFilters(wheelchairFilter: Boolean, mensFilter: Boolean, womensFilter: Boolean, amenityStatusFilter: String?, lowCrowdLvlFilter: Boolean, mediumCrowdLvlFilter: Boolean, highCrowdLvlFilter: Boolean, nearestAvailableFilter: Boolean) {
+        val filtered = amenities.filter { amenity ->
+            val matchesWheelchair = wheelchairFilter && amenity.subType.equals("Handicap", true)
+            val matchesMens = mensFilter && amenity.subType.equals("Male", true)
+            val matchesWomens = womensFilter && amenity.subType.equals("Female", true)
+            val matchesLowLvl = lowCrowdLvlFilter && amenity.congestion.equals("Low", true)
+            val matchesMediumLvl = mediumCrowdLvlFilter && amenity.congestion.equals("Medium", true)
+            val matchesHighLvl = highCrowdLvlFilter && amenity.congestion.equals("High", true)
+
+            val typeMatch = (!mensFilter && !womensFilter && !wheelchairFilter) || (matchesMens || matchesWomens || matchesWheelchair)
+            val statusMatch = when (amenityStatusFilter) {
                 "open" -> amenity.isAccessible
                 "closed" -> !amenity.isAccessible
                 else -> true   // null → when no status filter applied
             }
-            typeMatch && statusMatch
+            val crowdLvlMatch = (!lowCrowdLvlFilter && !mediumCrowdLvlFilter && !highCrowdLvlFilter) || (matchesLowLvl || matchesMediumLvl || matchesHighLvl)
+
+            typeMatch && statusMatch && crowdLvlMatch
         }
 
-        val filteredFeatures = filtered.mapNotNull { amenity ->
+        // if "nearest available option" is selected
+        val selectedTypes = listOfNotNull(
+            if (mensFilter) "Male" else null,
+            if (womensFilter) "Female" else null,
+            if (wheelchairFilter) "Handicap" else null
+        )
+        val nearestByType: List<AmenityDetail> = if (nearestAvailableFilter) {
+            selectedTypes.mapNotNull { type ->
+                filtered
+                    .filter { it.subType.equals(type, true) && it.isAccessible }
+                    .minByOrNull { distanceToUser(it) }
+            }
+        } else { filtered }
+
+        val finalFiltered = if (nearestAvailableFilter && nearestByType.isNotEmpty()) {
+            nearestByType
+        } else { filtered }
+
+        if (finalFiltered.isNullOrEmpty()) {
+            noFilteringResultsFound = true
+            return
+        }
+
+        val filteredFeatures = finalFiltered.mapNotNull { amenity ->
             val node = mapNodes.find { it.id == amenity.nodeId }
             if (node == null) {
                 Log.e("DEBUG", "No node found for amenity ${amenity.id} nodeId=${amenity.nodeId}")
@@ -398,11 +442,16 @@ fun MapScreen(
     }
 
     fun resetFilterTypes() {
-        mens = false
-        womens = false
-        wheelchair = false
-        amenityStatus = null
-        applyCustomFilters()
+        wheelchairFilter = false
+        mensFilter = false
+        womensFilter = false
+        amenityStatusFilter = null
+        lowCrowdLvlFilter = false
+        mediumCrowdLvlFilter = false
+        highCrowdLvlFilter = false
+        nearestAvailableFilter = false
+
+        applyCustomFilters(wheelchairFilter, mensFilter, womensFilter, amenityStatusFilter, lowCrowdLvlFilter, mediumCrowdLvlFilter, highCrowdLvlFilter, nearestAvailableFilter)
     }
 
     // Function to simulate navigation
@@ -772,6 +821,14 @@ fun MapScreen(
         Modifier.padding(top = 8.dp, end = 6.dp)    // default (facing north)
     }
 
+    // dismiss the error message displayed on screen when no results are found using custom filters
+    LaunchedEffect(noFilteringResultsFound) {
+        if (noFilteringResultsFound) {
+            delay(2500)
+            noFilteringResultsFound = false
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
             factory = { mapView },
@@ -1024,10 +1081,14 @@ fun MapScreen(
                     .zIndex(10f) // ensure it sits above the map
                     .padding(24.dp)
             ) {
-                var tempWheelchair by remember { mutableStateOf(wheelchair) }
-                var tempMens by remember { mutableStateOf(mens) }
-                var tempWomens by remember { mutableStateOf(womens) }
-                var tempStatus by remember { mutableStateOf(amenityStatus) }
+                var tempWheelchair by remember { mutableStateOf(wheelchairFilter) }
+                var tempMens by remember { mutableStateOf(mensFilter) }
+                var tempWomens by remember { mutableStateOf(womensFilter) }
+                var tempStatus by remember { mutableStateOf(amenityStatusFilter) }
+                var tempLowLvl by remember { mutableStateOf(lowCrowdLvlFilter) }
+                var tempMediumLvl by remember { mutableStateOf(mediumCrowdLvlFilter) }
+                var tempHighLvl by remember { mutableStateOf(highCrowdLvlFilter) }
+                var tempNearestAvailable by remember { mutableStateOf(nearestAvailableFilter) }
 
                 Column(modifier = Modifier.fillMaxSize()) {
                     Row(
@@ -1059,6 +1120,10 @@ fun MapScreen(
                                     tempMens = false
                                     tempWomens = false
                                     tempStatus = null
+                                    tempLowLvl = false
+                                    tempMediumLvl = false
+                                    tempHighLvl = false
+                                    tempNearestAvailable = false
                                 }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
@@ -1078,7 +1143,7 @@ fun MapScreen(
                         color = androidx.compose.ui.graphics.Color.LightGray
                     )
 
-                    // Checkboxes
+                    // Checkboxes/Filter Options
                     Text(
                         text = "Restroom Types",
                         fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)),
@@ -1132,13 +1197,17 @@ fun MapScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                tempStatus = if (tempStatus == "open") null else "open"
+                                if (!tempNearestAvailable) {
+                                    tempStatus = if (tempStatus == "open") null else "open"
+                                }
                             }
                     ) {
                         RadioButton(
                             selected = tempStatus == "open",
                             onClick = {
-                                tempStatus = if (tempStatus == "open") null else "open"
+                                if (!tempNearestAvailable) {
+                                    tempStatus = if (tempStatus == "open") null else "open"
+                                }
                             }
                         )
                         Text("Open")
@@ -1148,16 +1217,86 @@ fun MapScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                tempStatus = if (tempStatus == "closed") null else "closed"
+                                if (!tempNearestAvailable) {
+                                    tempStatus = if (tempStatus == "closed") null else "closed"
+                                }
                             }
                     ) {
                         RadioButton(
                             selected = tempStatus == "closed",
                             onClick = {
-                                tempStatus = if (tempStatus == "closed") null else "closed"
+                                if (!tempNearestAvailable) {
+                                    tempStatus = if (tempStatus == "closed") null else "closed"
+                                }
                             }
                         )
                         Text("Closed")
+                    }
+                    Text(
+                        text = "Proximity",
+                        fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)),
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                tempNearestAvailable = !tempNearestAvailable
+                                if (tempNearestAvailable) tempStatus = "open" else tempStatus = null
+                            }
+                    ) {
+                        Checkbox(
+                            checked = tempNearestAvailable,
+                            onCheckedChange = { checked ->
+                                tempNearestAvailable = checked
+                                if (checked) tempStatus = "open" else tempStatus = null
+                            }
+                        )
+                        Text("Nearest Available Option")
+                    }
+                    Text(
+                        text = "Crowd Level",
+                        fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)),
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempLowLvl = !tempLowLvl }
+                    ) {
+                        Checkbox(
+                            checked = tempLowLvl,
+                            onCheckedChange = { tempLowLvl = it }
+                        )
+                        Text("Low")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempMediumLvl = !tempMediumLvl }
+                    ) {
+                        Checkbox(
+                            checked = tempMediumLvl,
+                            onCheckedChange = { tempMediumLvl = it }
+                        )
+                        Text("Medium")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempHighLvl = !tempHighLvl }
+                    ) {
+                        Checkbox(
+                            checked = tempHighLvl,
+                            onCheckedChange = { tempHighLvl = it }
+                        )
+                        Text("High")
                     }
 
                     Spacer(Modifier.weight(1f))
@@ -1172,26 +1311,31 @@ fun MapScreen(
                                 .fillMaxWidth()
                                 .background(androidx.compose.ui.graphics.Color.Black, shape = RoundedCornerShape(10.dp))
                                 .clickable {
-                                    showAmenityBox = false
-                                    showFilterDialog = false
+                                    applyCustomFilters(tempWheelchair, tempMens, tempWomens, tempStatus, tempLowLvl, tempMediumLvl, tempHighLvl, tempNearestAvailable)
+                                    if (!noFilteringResultsFound) {
+                                        showAmenityBox = false
+                                        showFilterDialog = false
 
-                                    wheelchair = tempWheelchair
-                                    mens = tempMens
-                                    womens = tempWomens
-                                    amenityStatus = tempStatus
+                                        wheelchairFilter = tempWheelchair
+                                        mensFilter = tempMens
+                                        womensFilter = tempWomens
+                                        amenityStatusFilter = tempStatus
+                                        lowCrowdLvlFilter = tempLowLvl
+                                        mediumCrowdLvlFilter = tempMediumLvl
+                                        highCrowdLvlFilter = tempHighLvl
+                                        nearestAvailableFilter = tempNearestAvailable
 
-                                    applyCustomFilters()
-
-                                    mapRef.value?.animateCamera(
-                                        CameraUpdateFactory.newCameraPosition(
-                                            CameraPosition.Builder()
-                                                .target(initialCameraPosition)
-                                                .zoom(16.0)
-                                                .bearing(0.0)
-                                                .tilt(0.0)
-                                                .build()
-                                        ), 2000
-                                    )
+                                        mapRef.value?.animateCamera(
+                                            CameraUpdateFactory.newCameraPosition(
+                                                CameraPosition.Builder()
+                                                    .target(initialCameraPosition)
+                                                    .zoom(16.0)
+                                                    .bearing(0.0)
+                                                    .tilt(0.0)
+                                                    .build()
+                                            ), 2000
+                                        )
+                                    }
                                 }
                                 .padding(vertical = 14.dp),
                             contentAlignment = Alignment.Center
@@ -1202,6 +1346,29 @@ fun MapScreen(
                                 style = MaterialTheme.typography.bodyLarge
                             )
                         }
+                    }
+                }
+
+                // Error message overlay with fade animation when no results found using custom filters
+                AnimatedVisibility(
+                    visible = noFilteringResultsFound,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(top = 16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .background(androidx.compose.ui.graphics.Color.Red, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "No results were found.",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 22.sp
+                        )
                     }
                 }
             }
@@ -1582,6 +1749,19 @@ private fun findClosestSegmentIndex(user: Node, path: List<Node>): Int {
     }
 
     return bestIndex
+}
+
+// calculates total distance of the computed path from the user to a specific amenity
+private fun pathLength(path: List<Node>): Double {
+    if (path.size < 2) return Double.POSITIVE_INFINITY
+
+    var total = 0.0
+    for (i in 0 until path.size - 1) {
+        val a = path[i]
+        val b = path[i + 1]
+        total += haversine(a.lat, a.lng, b.lat, b.lng)
+    }
+    return total
 }
 
 private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityDetail>, mapNodes: MutableList<MapNode>, mapViewModel: MapViewModel) {

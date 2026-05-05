@@ -1,4 +1,4 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.profile
 
 data class DisabilityProfile(
     val createdAt: Long = 0L,

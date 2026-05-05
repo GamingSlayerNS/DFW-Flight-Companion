@@ -1,4 +1,4 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.map
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -67,14 +67,20 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
+import com.example.dfwflightcompanion.R
+import com.example.dfwflightcompanion.helpers.AmenityDetail
+import com.example.dfwflightcompanion.helpers.Direction
+import com.example.dfwflightcompanion.helpers.MapBackground
+import com.example.dfwflightcompanion.helpers.MapNode
+import com.example.dfwflightcompanion.helpers.haversine
+import com.example.dfwflightcompanion.helpers.loadVectorToBitmap
+import com.example.dfwflightcompanion.navigation.GraphBuilder
+import com.example.dfwflightcompanion.navigation.Node
+import com.example.dfwflightcompanion.navigation.Pathfinding
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
 import java.util.Locale
 import kotlin.math.acos
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.pow
-import kotlin.math.sin
 import kotlin.math.sqrt
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -103,29 +109,7 @@ import org.maplibre.geojson.LineString
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
-enum class Direction {
-    UP, DOWN, LEFT, RIGHT
-}
 
-data class AmenityDetail(
-    val id: String = "",
-    val name: String = "",
-    val type: String = "",
-    val subType: String = "",
-    var congestion: String = "",
-    val lastUpdated: Long = 0L,
-    val isAccessible: Boolean = true,
-    val nodeId: String = ""
-)
-
-data class MapNode(
-    val id: String,
-    val latitude: Double,
-    val longitude: Double,
-    val level: Int,
-    val type: String = "",
-    val name: String = ""
-)
 
 fun formatTimeAgo(timestamp: Long): String {
     if (timestamp == 0L) return "Never"
@@ -1625,25 +1609,20 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     // 1. Floorplan Sources
     style.addSource(GeoJsonSource("floorplan-source"))
     style.addLayer(FillLayer("building-layer", "floorplan-source").withProperties(
-        PropertyFactory.fillColor(color(Color.LTGRAY)),
-        PropertyFactory.fillOpacity(0.5f)
+        PropertyFactory.fillColor(color("#F5F5F7".toColorInt())),
+        PropertyFactory.fillOpacity(0.5f),
+        PropertyFactory.fillOutlineColor(color("#BCBCBC".toColorInt()))
     ).withFilter(eq(get("type"), literal("building"))))
 
-    style.addLayer(FillLayer("hallway-layer", "floorplan-source").withProperties(
-        PropertyFactory.fillColor(color(Color.WHITE))
-    ).withFilter(eq(get("type"), literal("hallway"))))
-
     style.addLayer(FillLayer("room-layer", "floorplan-source").withProperties(
-        PropertyFactory.fillColor(match(get("type"),
-            literal("room"), color("#BBDEFB".toColorInt()),
-            literal("restroom"), color("#C8E6C9".toColorInt()),
-            literal("entrance"), color("#FFF9C4".toColorInt()),
-            literal("exit"), color("#FFCDD2".toColorInt()),
+        PropertyFactory.fillColor(match(get("gender"),
+            literal("male"), color("#3399FF".toColorInt()),
+            literal("female"), color("#FF66B2".toColorInt()),
+            literal("neutral"), color("#9933FF".toColorInt()),
             color(Color.GRAY))),
         PropertyFactory.fillOutlineColor(Color.DKGRAY)
     ).withFilter(any(
-        eq(get("type"), literal("room")), eq(get("type"), literal("restroom")),
-        eq(get("type"), literal("entrance")), eq(get("type"), literal("exit"))
+        eq(get("type"), literal("restroom"))
     )))
 
     // 2. Routing Sources
@@ -1674,13 +1653,15 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     ))
 
     // 5. Adding Markers
-    val markerBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.restroom)
-    val safeMarkerBitmap = markerBitmap.copy(Bitmap.Config.ARGB_8888, false)
-    val scaledMarkerBitmap = Bitmap.createScaledBitmap(safeMarkerBitmap, 200, 200, true)
+    val mensIcon = loadVectorToBitmap(context, R.drawable.mens, 60, 60)
+    val womensIcon = loadVectorToBitmap(context, R.drawable.womens, 60, 60)
+    val neutralIcon = loadVectorToBitmap(context, R.drawable.neutral, 60, 60)
 
-    if(style.getImage("marker-icon") == null) {
-        style.addImage("marker-icon", scaledMarkerBitmap)
-    }
+// Register with the Style
+    style.addImage("icon-male", mensIcon)
+    style.addImage("icon-female", womensIcon)
+    style.addImage("icon-neutral", neutralIcon)
+
 
     // Add Markers pulled from firebase
     val markerSourceId = "marker-source"
@@ -1688,17 +1669,27 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
 
     style.addLayer(
         SymbolLayer("marker-layer", markerSourceId).withProperties(
-            iconImage("marker-icon"),
+            // The "match" expression checks the 'gender' property of each feature
+            iconImage(
+                match(
+                    get("gender"),
+                    literal("icon-neutral"), // Default value
+                    stop("male", "icon-male"),
+                    stop("female", "icon-female"),
+                    stop("neutral", "icon-neutral")
+                )
+            ),
             iconSize(
                 interpolate(
-                    exponential(1.5f),    // scaling factor for smooth growth
+                    exponential(1.5f),
                     zoom(),
                     stop(12, 0.4f),
                     stop(16, 0.8f),
                     stop(20, 1.6f)
                 )
             ),
-            iconAllowOverlap(true)
+            iconAllowOverlap(true),
+            iconIgnorePlacement(true)
         )
     )
 
@@ -1725,13 +1716,6 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
 }
 
 private val mapBackgrounds = mutableStateListOf<MapBackground>() // list used for fetching map background data from db
-data class MapBackground(
-    val id: String,
-    val name: String,
-    val type: String,
-    val level: Int,
-    val coordinates: List<LatLng>
-)
 private fun findBackgroundForSelectedDest(selectedDest: Pair<Double, Double>?, mapBackgrounds: List<MapBackground>): MapBackground? {
     if (selectedDest == null) return null
     val (lng, lat) = selectedDest
@@ -1762,7 +1746,6 @@ private fun isPointInsidePolygon(point: LatLng, polygon: List<LatLng>): Boolean 
 
     return intersects
 }
-
 private fun angleBetween(a: Node, b: Node, c: Node): Double {
     val v1x = b.lng - a.lng
     val v1y = b.lat - a.lat
@@ -1808,17 +1791,6 @@ private fun generateDirections(path: List<Node>): Pair<List<String>, List<Int>> 
     segments.add(path.size - 1)
 
     return directions to segments
-}
-
-private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLon = Math.toRadians(lon2 - lon1)
-
-    val a = sin(dLat / 2).pow(2.0) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2.0)
-
-    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-
-    return 6371000.0 * c
 }
 
 private fun distanceToSegment(p: Node, a: Node, b: Node): Double {
@@ -1910,7 +1882,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                 val name = doc["name"] as? String ?: ""
                 val id = doc["id"] as? String ?: ""
                 val level = (doc["level"] as? Number)?.toInt() ?: 0
-
+                val gender = doc["gender"] as? String ?: ""
                 val latLngs = coords.map {
                     LatLng(
                         it["latitude"] as Double,
@@ -1928,7 +1900,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                 )
 
                 val coordString = coords.joinToString(",") { "[${it["longitude"]}, ${it["latitude"]}, $level]" }
-                featureList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Polygon", "coordinates": [[$coordString]]}}""")
+                featureList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level", "gender":"$gender" }, "geometry": {"type": "Polygon", "coordinates": [[$coordString]]}}""")
             }
             val geoJson = """{"type": "FeatureCollection", "features": [${featureList.joinToString(",")}]}"""
             style.getSourceAs<GeoJsonSource>("floorplan-source")?.setGeoJson(geoJson)
@@ -1969,6 +1941,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                 val type = doc["type"] as? String ?: ""
                 val name = doc["name"] as? String ?: ""
                 val id = doc["id"] as? String ?: ""
+                val gender = doc["gender"] as? String ?: ""
                 val level = (doc["level"] as? Number)?.toInt() ?: 0
                 if (id != "node_entrance" && id != "node_exit") {
                     mapNodes.add(
@@ -1981,10 +1954,10 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                             name = name
                         )
                     )
-                    nodeList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level" }, "geometry": {"type": "Point", "coordinates": [$lng, $lat]}}""")
+                    nodeList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level", "gender":"$gender" }, "geometry": {"type": "Point", "coordinates": [$lng, $lat]}}""")
                 }
             }
-            val geoJson = """{"type": "FeatureCollection", "features": [${nodeList.take(7).joinToString(",")}]}""" // only display markers for the first 7 restrooms from DB
+            val geoJson = """{"type": "FeatureCollection", "features": [${nodeList.joinToString(",")}]}"""
             style.getSourceAs<GeoJsonSource>("marker-source")?.setGeoJson(geoJson)
         }
 
@@ -1995,16 +1968,18 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
             val data = result.getData() as? List<Map<String, Any>> ?: return@addOnSuccessListener
             amenities.clear()
             data.forEach { map ->
-                amenities.add(AmenityDetail(
-                    id = map["AmenityID"] as? String ?: "",
-                    name = map["Name"] as? String ?: "Unknown",
-                    type = map["AmenityType"] as? String ?: "",
-                    subType = map["SubTypeName"] as? String ?: "",
-                    congestion = map["Congestion"] as? String ?: "Low",
-                    lastUpdated = (map["LastUpdated"] as? Number)?.toLong() ?: 0L,
-                    isAccessible = map["IsAccessible"] as? Boolean ?: false,
-                    nodeId = map["NodeID"] as? String ?: ""
-                ))
+                amenities.add(
+                    AmenityDetail(
+                        id = map["AmenityID"] as? String ?: "",
+                        name = map["Name"] as? String ?: "Unknown",
+                        type = map["AmenityType"] as? String ?: "",
+                        subType = map["SubTypeName"] as? String ?: "",
+                        congestion = map["Congestion"] as? String ?: "Low",
+                        lastUpdated = (map["LastUpdated"] as? Number)?.toLong() ?: 0L,
+                        isAccessible = map["IsAccessible"] as? Boolean ?: false,
+                        nodeId = map["NodeID"] as? String ?: ""
+                    )
+                )
             }
             // only store the first 7 restrooms from DB
             if (amenities.size > 7) {

@@ -1,13 +1,14 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.map
 
-import androidx.lifecycle.ViewModel
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.ViewModel
+import com.example.dfwflightcompanion.amenities.Amenity
+import com.google.firebase.firestore.FirebaseFirestore
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.dfwflightcompanion.helpers.AmenityDetail
 
 class MapViewModel : ViewModel() {
-
     var selectedAmenityId by mutableStateOf<String?>(null)
         private set
     var amenities by mutableStateOf<List<Amenity>>(emptyList())

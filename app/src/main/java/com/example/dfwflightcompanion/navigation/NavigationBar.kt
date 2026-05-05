@@ -1,4 +1,4 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
@@ -7,6 +7,10 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.dfwflightcompanion.AppNavHost
+import com.example.dfwflightcompanion.navigation.Destination
+import com.example.dfwflightcompanion.map.MapViewModel
+import com.example.dfwflightcompanion.profile.DisabilityProfileViewModel
 
 
 @Composable

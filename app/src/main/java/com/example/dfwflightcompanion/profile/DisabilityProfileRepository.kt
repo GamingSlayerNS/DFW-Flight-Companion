@@ -1,4 +1,4 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.profile
 
 import android.content.Context
 import androidx.datastore.core.DataStore

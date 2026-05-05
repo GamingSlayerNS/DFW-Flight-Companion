@@ -1,4 +1,4 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.profile
 
 import android.util.Log
 import androidx.compose.foundation.layout.*
@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.example.dfwflightcompanion.Routes
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
 

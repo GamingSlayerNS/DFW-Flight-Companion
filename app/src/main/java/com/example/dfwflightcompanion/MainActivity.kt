@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
+import com.example.dfwflightcompanion.navigation.BottomNavigationBar
 import com.example.dfwflightcompanion.ui.theme.DFWFlightCompanionTheme
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.FirebaseFirestore
@@ -33,7 +34,6 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     val db = FirebaseFirestore.getInstance()
-
                     if (shouldPublishGraph) {
                         statusMessage = "Publishing Navigation Graph..."
                         Firebase.functions.getHttpsCallable("publishNavigationGraph").call()
@@ -148,6 +148,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Build MapBackground, MapNode, PathEdge, and Amenity
     private fun seedFromGeoJson(db: FirebaseFirestore, onComplete: () -> Unit) {
         try {
             Log.d("FirestoreDB", "Starting GeoJSON Seed...")
@@ -159,8 +160,8 @@ class MainActivity : ComponentActivity() {
                 "Center" to GeoPoint(32.8974, -97.0446)
             ))
 
-            // 2. Parse routing.geojson for Nodes and Edges
-            val routingJson = assets.open("routing.geojson").bufferedReader().use { it.readText() }
+            // 2. Parse routing.geojson for Nodes, Edges and Amenities
+            val routingJson = assets.open("mapdata/routing.geojson").bufferedReader().use { it.readText() }
             val routingObj = JSONObject(routingJson)
             val routingFeatures = routingObj.getJSONArray("features")
 
@@ -179,7 +180,16 @@ class MainActivity : ComponentActivity() {
                         "type" to "poi",
                         "name" to props.optString("name"),
                         "level" to props.optInt("level"),
-                        "weight" to props.optDouble("weight"),
+                        "gender" to props.optString("gender"),
+                        "coordinates" to GeoPoint(coords.getDouble(1), coords.getDouble(0))
+                    ))
+                    db.collection("Amenity").document(id).set(hashMapOf(
+                        "id" to id,
+                        "terminalId" to "Terminal D",
+                        "type" to "poi",
+                        "name" to props.optString("name"),
+                        "level" to props.optInt("level"),
+                        "gender" to props.optString("gender"),
                         "coordinates" to GeoPoint(coords.getDouble(1), coords.getDouble(0))
                     ))
                 } else if (type == "path") {
@@ -193,15 +203,15 @@ class MainActivity : ComponentActivity() {
                         "id" to id,
                         "type" to "path",
                         "name" to props.optString("name"),
-                        "weight" to props.optDouble("weight"),
                         "coordinates" to pathPoints,
                         "isOpen" to true
                     ))
                 }
             }
 
+
             // 3. Parse floorplan.geojson for MapBackgrounds (Polygons)
-            val floorplanJson = assets.open("floorplan.geojson").bufferedReader().use { it.readText() }
+            val floorplanJson = assets.open("mapdata/floorplan.geojson").bufferedReader().use { it.readText() }
             val floorplanObj = JSONObject(floorplanJson)
             val floorplanFeatures = floorplanObj.getJSONArray("features")
 
@@ -210,7 +220,7 @@ class MainActivity : ComponentActivity() {
                 val props = feature.getJSONObject("properties")
                 val geom = feature.getJSONObject("geometry")
                 val id = props.optString("id")
-                
+
                 if (geom.getString("type") == "Polygon") {
                     val rings = geom.getJSONArray("coordinates")
                     val exteriorRing = rings.getJSONArray(0)
@@ -225,6 +235,7 @@ class MainActivity : ComponentActivity() {
                         "type" to props.optString("type"),
                         "name" to props.optString("name"),
                         "level" to props.optInt("level"),
+                        "gender" to props.optString("gender"),
                         "coordinates" to points
 
                     ))
@@ -280,4 +291,5 @@ class MainActivity : ComponentActivity() {
             Log.e("FirestoreDB", "GeoJSON Seed Failed", e)
         }
     }
+
 }

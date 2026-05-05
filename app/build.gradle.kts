@@ -51,6 +51,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.functions)
+    implementation(platform("com.google.firebase:firebase-bom:34.12.0"))
+    implementation("com.google.firebase:firebase-database")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.9.7")
     implementation("com.mapbox.mapboxsdk:mapbox-sdk-geojson:5.1.0")

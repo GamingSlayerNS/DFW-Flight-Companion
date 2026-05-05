@@ -41,6 +41,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -68,6 +69,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.functions.functions
+import java.util.Locale
 import kotlin.math.acos
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -153,7 +155,7 @@ fun MapScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var isNavigating by remember { mutableStateOf(false) }
     val mapRef = remember { mutableStateOf<MapLibreMap?>(null)}
-    
+
     // User's current location (Simulation)
     val userLocation = remember { mutableStateOf(LatLng(32.8993, -97.0446)) }
     val initialCameraPosition = remember { LatLng(32.8974, -97.0446) }
@@ -162,8 +164,27 @@ fun MapScreen(
     }
     var selectedDest by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
-    val amenities = remember { mutableStateListOf<AmenityDetail>() }
+    // val amenities = remember { mutableStateListOf<AmenityDetail>() }
+    val databaseAmenities = mapViewModel.amenities
+    val amenities = remember(databaseAmenities) {
+        databaseAmenities.map { amenity ->
+            AmenityDetail(
+                id = amenity.id,
+                name = amenity.name,
+                type = amenity.type,
+                subType = amenity.subType,
+                congestion = amenity.congestion,
+                lastUpdated = amenity.lastUpdated,
+                isAccessible = amenity.isAccessible,
+                nodeId = amenity.nodeId
+            )
+        }.toMutableList()
+    }
+
     var selectedAmenity by remember { mutableStateOf<AmenityDetail?>(null) }
+    var selectedAmenityId by remember { mutableStateOf<String?>(null) }
+    var clickedOnMapAmenity by remember { mutableStateOf(false) }
+    var reroutedAmenity by remember { mutableStateOf<AmenityDetail?>(null) }
 
     val mapNodes = remember { mutableStateListOf<MapNode>() }
     var showFilterDialog by remember { mutableStateOf(false) }
@@ -179,6 +200,7 @@ fun MapScreen(
     var nearestAvailableFilter by remember { mutableStateOf(false) }
 
     var noFilteringResultsFound by remember { mutableStateOf(false) }
+    var amenityClosedInRoute by remember { mutableStateOf(false) }
 
     var selectionFromAmenityScreen by remember { mutableStateOf<String?>(null) }
     var cameraBearing by remember { mutableStateOf(0.0) } // tracking the camera angle
@@ -420,6 +442,11 @@ fun MapScreen(
             return
         }
 
+        if (isNavigating) {
+            reroutedAmenity = finalFiltered[0]
+            return
+        }
+
         val filteredFeatures = finalFiltered.mapNotNull { amenity ->
             val node = mapNodes.find { it.id == amenity.nodeId }
             if (node == null) {
@@ -608,9 +635,15 @@ fun MapScreen(
                     val nodeId = clickedFeature?.getStringProperty("id")
 
                     // Find the amenity linked to this NodeID
-                    selectedAmenity = when {
+                    /* selectedAmenity = when {
                         features.isNotEmpty() -> amenities.find { it.nodeId == nodeId }
                         amenityFeatures.isNotEmpty() -> amenities.find { it.id == nodeId }
+                        else -> null
+                    } */
+                    clickedOnMapAmenity = true
+                    selectedAmenityId = when {
+                        features.isNotEmpty() -> nodeId
+                        amenityFeatures.isNotEmpty() -> nodeId
                         else -> null
                     }
 
@@ -799,6 +832,44 @@ fun MapScreen(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
+    }
+
+    LaunchedEffect(mapViewModel.amenities) {
+        amenities.clear()
+        amenities.addAll(
+            mapViewModel.amenities.map { amenity ->
+                AmenityDetail(
+                    id = amenity.id,
+                    name = amenity.name,
+                    type = amenity.type,
+                    subType = amenity.subType,
+                    congestion = amenity.congestion,
+                    lastUpdated = amenity.lastUpdated,
+                    isAccessible = amenity.isAccessible,
+                    nodeId = amenity.nodeId
+                )
+            }
+        )
+
+        val style = mapRef.value?.style
+        if (style != null) {
+            fetchDataFromFunctions(style, amenities, mapNodes, mapViewModel)
+        }
+
+        val (lng, lat) = currentDestination ?: return@LaunchedEffect
+        val node = mapNodes.find { it.latitude == String.format(Locale.US, "%.5f", lat).toDouble() && it.longitude == String.format(Locale.US, "%.5f", lng).toDouble() } ?: return@LaunchedEffect
+        val amenity = amenities.firstOrNull { it.nodeId == node.id } ?: return@LaunchedEffect
+        if (isNavigating && !amenity.isAccessible) {
+            amenityClosedInRoute = true
+        }
+    }
+
+    LaunchedEffect(amenities, clickedOnMapAmenity) {
+        if (mapRef.value?.style?.getLayer("marker-layer")?.visibility?.value == Property.VISIBLE)
+            selectedAmenity = amenities.firstOrNull { it.nodeId == selectedAmenityId }
+        else
+            selectedAmenity = amenities.firstOrNull { it.id == selectedAmenityId }
+        clickedOnMapAmenity = false
     }
 
     fun moveUser(direction: Direction) {
@@ -993,8 +1064,8 @@ fun MapScreen(
                                 fontFamily = FontFamily.SansSerif
                             )
                             Text(
-                                text = "OPEN",
-                                color = androidx.compose.ui.graphics.Color(0xFF00C853),
+                                text = if (selectedAmenity?.isAccessible == true) "OPEN" else "CLOSED",
+                                color = if (selectedAmenity?.isAccessible == true) androidx.compose.ui.graphics.Color(0xFF00C853) else androidx.compose.ui.graphics.Color(0xFFE74C3C),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 fontFamily = FontFamily.SansSerif
@@ -1472,6 +1543,56 @@ fun MapScreen(
                     }
                 }
             }
+            if (amenityClosedInRoute) {
+                AnimatedVisibility(
+                    visible = amenityClosedInRoute,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) {
+                    Surface(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        color = androidx.compose.ui.graphics.Color(0xFF1A1A1A),
+                        shape = RoundedCornerShape(12.dp),
+                        tonalElevation = 4.dp
+                    ) {
+                        Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
+                            Text("Destination Closed", fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color.White)
+                            if (reroutedAmenity?.subType.equals("Male", true)) {
+                                applyCustomFilters(false, true, false, "open", false, false, false, true)
+                                Text(
+                                    "Would you like to reroute to the nearest available Men's restroom?",
+                                    color = androidx.compose.ui.graphics.Color.White
+                                )
+                            } else if (reroutedAmenity?.subType.equals("Female", true)) {
+                                applyCustomFilters(false, false, true, "open", false, false, false, true)
+                                Text(
+                                    "Would you like to reroute to the nearest available Women's restroom?",
+                                    color = androidx.compose.ui.graphics.Color.White
+                                )
+                            } else {
+                                applyCustomFilters(true, false, false, "open", false, false, false, true)
+                                Text(
+                                    "Would you like to reroute to the nearest available Wheelchair Accessible restroom?",
+                                    color = androidx.compose.ui.graphics.Color.White
+                                )
+                            }
+                            val rerouteDist = reroutedAmenity?.let { distanceToUser(it) }
+                            val rerouteTime = rerouteDist?.div(40.0)?.toInt()
+                            Text("Estimated Distance: ${"${rerouteDist}ft (${rerouteTime}min)"}")
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = {
+                                    amenityClosedInRoute = false
+                                    reroutedAmenity = null
+                                }) { Text("Cancel") }
+                                Button(onClick = {
+                                    amenityClosedInRoute = false
+                                    Log.d("REROUTED", "${reroutedAmenity?.nodeId}")
+                                    reroutedAmenity = null
+                                }) { Text("Reroute") }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Column {
@@ -1875,7 +1996,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
             amenities.clear()
             data.forEach { map ->
                 amenities.add(AmenityDetail(
-                    id = map["id"] as? String ?: "",
+                    id = map["AmenityID"] as? String ?: "",
                     name = map["Name"] as? String ?: "Unknown",
                     type = map["AmenityType"] as? String ?: "",
                     subType = map["SubTypeName"] as? String ?: "",

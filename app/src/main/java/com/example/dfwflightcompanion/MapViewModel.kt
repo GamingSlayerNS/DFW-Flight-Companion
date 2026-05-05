@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import com.google.firebase.firestore.FirebaseFirestore
 
 class MapViewModel : ViewModel() {
 
@@ -11,6 +12,30 @@ class MapViewModel : ViewModel() {
         private set
     var amenities by mutableStateOf<List<Amenity>>(emptyList())
         private set
+
+    init {
+        // Firestore realtime listener
+        FirebaseFirestore.getInstance()
+            .collection("Amenity")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val details = snapshot.documents.map { doc ->
+                        val map = doc.data ?: emptyMap<String, Any>()
+                        AmenityDetail(
+                            id = map["AmenityID"] as? String ?: "",
+                            name = map["Name"] as? String ?: "Unknown",
+                            type = map["AmenityType"] as? String ?: "",
+                            subType = map["SubTypeName"] as? String ?: "",
+                            congestion = map["Congestion"] as? String ?: "Low",
+                            lastUpdated = (map["LastUpdated"] as? Number)?.toLong() ?: 0L,
+                            isAccessible = map["IsAccessible"] as? Boolean ?: false,
+                            nodeId = map["NodeID"] as? String ?: ""
+                        )
+                    }
+                    storeAmenities(details)
+                }
+            }
+    }
 
     fun selectAmenity(id: String?) {
         selectedAmenityId = id
@@ -22,6 +47,8 @@ class MapViewModel : ViewModel() {
                 name = detail.name,
                 type = detail.type,
                 subType = detail.subType,
+                congestion = detail.congestion,
+                lastUpdated = detail.lastUpdated,
                 isAccessible = detail.isAccessible,
                 nodeId = detail.nodeId
             )

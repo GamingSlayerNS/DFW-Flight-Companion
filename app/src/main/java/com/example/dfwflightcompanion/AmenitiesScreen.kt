@@ -21,6 +21,8 @@ data class Amenity(
     val name: String = "",
     val type: String = "",
     val subType: String = "",
+    val congestion: String = "",
+    val lastUpdated: Long = 0L,
     val isAccessible: Boolean = false,
     val nodeId: String = ""
 )
@@ -160,7 +162,7 @@ fun AmenityCard(
                     }
                 }
 
-                if (amenity.isAccessible) {
+                if (amenity.subType.equals("Handicap", true)) {
                     Icon(
                         imageVector = Icons.Default.Accessible,
                         contentDescription = "Accessible",

@@ -1,8 +1,6 @@
 package com.example.dfwflightcompanion.map
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
@@ -74,7 +72,9 @@ import com.example.dfwflightcompanion.helpers.MapBackground
 import com.example.dfwflightcompanion.helpers.MapNode
 import com.example.dfwflightcompanion.helpers.haversine
 import com.example.dfwflightcompanion.helpers.loadVectorToBitmap
+import com.example.dfwflightcompanion.navigation.Edge
 import com.example.dfwflightcompanion.navigation.GraphBuilder
+import com.example.dfwflightcompanion.navigation.NavigationGraphRepository
 import com.example.dfwflightcompanion.navigation.Node
 import com.example.dfwflightcompanion.navigation.Pathfinding
 import com.google.firebase.Firebase
@@ -108,8 +108,6 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.LineString
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
-
-
 
 fun formatTimeAgo(timestamp: Long): String {
     if (timestamp == 0L) return "Never"
@@ -195,13 +193,15 @@ fun MapScreen(
     var currentNavDistanceToTurn by remember { mutableStateOf("") }
     var navPath by remember { mutableStateOf<List<Node>>(emptyList()) }
 
-    var graph by remember { mutableStateOf<Map<Node, List<Node>>>(emptyMap()) }
+    var graph by remember { mutableStateOf<Map<Node, List<Edge>>>(emptyMap()) }
 
     LaunchedEffect(Unit) {
+        NavigationGraphRepository.startListening()
+        /*
         val functions = Firebase.functions
         // ONLY if testing locally:
         functions.useEmulator("10.0.2.2", 5001)
-        
+
         functions.getHttpsCallable("getNavigationGraph").call()
             .addOnSuccessListener { result ->
                 @Suppress("UNCHECKED_CAST")
@@ -212,7 +212,21 @@ fun MapScreen(
             }
             .addOnFailureListener { e ->
                 Log.e("Navigation", "Failed to fetch graph", e)
-            }
+            }*/
+    }
+
+    val navigationGraph by NavigationGraphRepository.navigationGraph.collectAsState()
+
+    LaunchedEffect(navigationGraph) {
+        navigationGraph?.let {
+            graph = GraphBuilder.fromNavigationGraph(it)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            NavigationGraphRepository.stopListening()
+        }
     }
 
     remember {
@@ -1702,7 +1716,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     val womensIcon = loadVectorToBitmap(context, R.drawable.womens, 60, 60)
     val neutralIcon = loadVectorToBitmap(context, R.drawable.neutral, 60, 60)
 
-// Register with the Style
+    // Register with the Style
     style.addImage("icon-male", mensIcon)
     style.addImage("icon-female", womensIcon)
     style.addImage("icon-neutral", neutralIcon)
@@ -1746,7 +1760,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
         SymbolLayer("amenity-layer", "amenity-source").withProperties(
             iconImage(
                 match(
-                    get("gender"),
+                    get("subType"),
                     literal("icon-neutral"), // Default value
                     stop("male", "icon-male"),
                     stop("female", "icon-female"),

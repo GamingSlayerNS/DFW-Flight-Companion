@@ -139,8 +139,8 @@ fun MapScreen(
     val mapRef = remember { mutableStateOf<MapLibreMap?>(null)}
 
     // User's current location (Simulation)
-    val userLocation = remember { mutableStateOf(LatLng(32.8993, -97.0446)) }
-    val initialCameraPosition = remember { LatLng(32.8974, -97.0446) }
+    val userLocation = remember { mutableStateOf(LatLng(32.897546, -97.044471)) }
+    val initialCameraPosition = remember { LatLng(32.897546, -97.044471) }
     var currentDestination by remember {
         mutableStateOf<Pair<Double, Double>?>(null)
     }
@@ -246,7 +246,7 @@ fun MapScreen(
                         CameraUpdateFactory.newCameraPosition(
                             CameraPosition.Builder()
                                 .target(initialCameraPosition)
-                                .zoom(16.0)
+                                .zoom(17.5)
                                 .build()
                         )
                     )

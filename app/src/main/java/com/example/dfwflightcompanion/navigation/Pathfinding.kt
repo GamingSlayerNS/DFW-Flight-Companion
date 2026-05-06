@@ -134,6 +134,9 @@ object Pathfinding {
         b: Node,
         snapped: Node
     ): Map<Node, List<Edge>> {
+        // If snapped landed exactly on an existing node, no insertion needed
+        if (snapped == a || snapped == b) return graph
+
         val newGraph = graph.mapValues { it.value.toMutableList() }.toMutableMap()
 
         // Remove original edge in both directions

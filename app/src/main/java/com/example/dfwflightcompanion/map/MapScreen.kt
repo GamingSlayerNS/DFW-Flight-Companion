@@ -371,6 +371,7 @@ fun MapScreen(
 
             if (segmentIndex >= turnSegmentIndex) {
                 currentStepIndex++
+                if (currentStepIndex >= currentDirections.size) return
                 turnSegmentIndex = turnSegments[currentStepIndex]
             }
 
@@ -2048,10 +2049,6 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                     )
                 )
             }
-            // only store the first 7 restrooms from DB
-            /* if (amenities.size > 7) {
-                amenities.subList(7, amenities.size).clear()
-            } */
             mapViewModel.storeAmenities(amenities)
         }
 }

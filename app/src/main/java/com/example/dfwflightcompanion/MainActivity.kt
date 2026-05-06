@@ -75,31 +75,23 @@ class MainActivity : ComponentActivity() {
 
     private fun populateRestrooms(db: FirebaseFirestore, onComplete: () -> Unit) {
         Log.d("FirestoreDB", "Populating restrooms...")
-        
+
+
+
         // 1. First, delete all existing amenities to avoid duplicates
         db.collection("Amenity").get().addOnSuccessListener { result ->
             val batch = db.batch()
+
             result.forEach { batch.delete(it.reference) }
-            
+
+
             batch.commit().addOnSuccessListener {
                 Log.d("FirestoreDB", "Wiped old amenities. Adding new ones...")
                 
                 // 2. Add the new restrooms from RestroomData
                 val addBatch = db.batch()
                 try {
-                    val sets = RestroomData.restroomSets
-                    sets.forEach { restroom ->
-                        val docRef = db.collection("Amenity").document(restroom.id)
-                        addBatch.set(docRef, hashMapOf(
-                            "AmenityID" to restroom.id,
-                            "Name" to restroom.name,
-                            "AmenityType" to "Restroom",
-                            "SubTypeName" to restroom.type,
-                            "Congestion" to restroom.congestion,
-                            "IsAccessible" to restroom.isAccessible,
-                            "NodeID" to restroom.nodeId
-                        ))
-                    }
+
 
                     addBatch.commit().addOnCompleteListener { task ->
                         if (task.isSuccessful) {
@@ -116,6 +108,35 @@ class MainActivity : ComponentActivity() {
             }.addOnFailureListener { e ->
                 Log.e("FirestoreDB", "Failed to wipe amenities", e)
                 onComplete()
+            }
+            val routingJson = assets.open("mapdata/routing.geojson").bufferedReader().use { it.readText() }
+            val routingObj = JSONObject(routingJson)
+            val routingFeatures = routingObj.getJSONArray("features")
+            val congestionLevels = listOf("Low", "Medium", "High")
+
+            for (i in 0 until routingFeatures.length()) {
+                val feature = routingFeatures.getJSONObject(i)
+                val props = feature.getJSONObject("properties")
+                if (props.optString("type") == "poi") {
+                    val id = props.optString("id")
+                    val name = props.optString("name")
+                    val subtype = props.optString("gender")
+                    val isAccessible = (props.optString("gender") == "neutral")
+                    val nodeId = props.optString("id")
+
+                    db.collection("Amenity").document(id).set(
+                        hashMapOf(
+                            "AmenityID" to id,
+                            "Name" to name,
+                            "AmenityType" to "Restroom",
+                            "SubTypeName" to subtype,
+                            "Congestion" to congestionLevels.random(),
+                            "IsAccessible" to isAccessible,
+                            "NodeID" to nodeId
+                        )
+                    )
+                }
+
             }
         }
     }
@@ -175,15 +196,6 @@ class MainActivity : ComponentActivity() {
                 if (type == "poi") {
                     val coords = geom.getJSONArray("coordinates")
                     db.collection("MapNode").document(id).set(hashMapOf(
-                        "id" to id,
-                        "terminalId" to "Terminal D",
-                        "type" to "poi",
-                        "name" to props.optString("name"),
-                        "level" to props.optInt("level"),
-                        "gender" to props.optString("gender"),
-                        "coordinates" to GeoPoint(coords.getDouble(1), coords.getDouble(0))
-                    ))
-                    db.collection("Amenity").document(id).set(hashMapOf(
                         "id" to id,
                         "terminalId" to "Terminal D",
                         "type" to "poi",

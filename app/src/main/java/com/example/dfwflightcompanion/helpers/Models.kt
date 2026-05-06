@@ -35,3 +35,14 @@ data class AmenityDetail(
     val isAccessible: Boolean = true,
     val nodeId: String = ""
 )
+
+data class Amenity(
+    val id: String = "",
+    val name: String = "",
+    val type: String = "",
+    val subType: String = "",
+    val congestion: String = "",
+    val lastUpdated: Long = 0L,
+    val isAccessible: Boolean = false,
+    val nodeId: String = ""
+)

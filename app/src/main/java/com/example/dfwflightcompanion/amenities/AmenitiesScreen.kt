@@ -15,18 +15,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.example.dfwflightcompanion.map.MapViewModel
 import com.example.dfwflightcompanion.Routes
+import com.example.dfwflightcompanion.helpers.Amenity
 import com.example.dfwflightcompanion.navigation.Destination
-
-data class Amenity(
-    val id: String = "",
-    val name: String = "",
-    val type: String = "",
-    val subType: String = "",
-    val congestion: String = "",
-    val lastUpdated: Long = 0L,
-    val isAccessible: Boolean = false,
-    val nodeId: String = ""
-)
 
 @Composable
 fun AmenitiesScreen(

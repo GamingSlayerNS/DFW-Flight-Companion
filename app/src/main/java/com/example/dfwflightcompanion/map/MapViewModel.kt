@@ -2,10 +2,10 @@ package com.example.dfwflightcompanion.map
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
-import com.example.dfwflightcompanion.amenities.Amenity
 import com.google.firebase.firestore.FirebaseFirestore
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import com.example.dfwflightcompanion.helpers.Amenity
 import com.example.dfwflightcompanion.helpers.AmenityDetail
 
 class MapViewModel : ViewModel() {

@@ -379,7 +379,7 @@ fun MapScreen(
 
     fun applyCustomFilters(wheelchairFilter: Boolean, mensFilter: Boolean, womensFilter: Boolean, amenityStatusFilter: String?, lowCrowdLvlFilter: Boolean, mediumCrowdLvlFilter: Boolean, highCrowdLvlFilter: Boolean, nearestAvailableFilter: Boolean) {
         val filtered = amenities.filter { amenity ->
-            val matchesWheelchair = wheelchairFilter && amenity.subType.equals("Handicap", true)
+            val matchesWheelchair = wheelchairFilter && amenity.subType.equals("Neutral", true)
             val matchesMens = mensFilter && amenity.subType.equals("Male", true)
             val matchesWomens = womensFilter && amenity.subType.equals("Female", true)
             val matchesLowLvl = lowCrowdLvlFilter && amenity.congestion.equals("Low", true)
@@ -401,7 +401,7 @@ fun MapScreen(
         val selectedTypes = listOfNotNull(
             if (mensFilter) "Male" else null,
             if (womensFilter) "Female" else null,
-            if (wheelchairFilter) "Handicap" else null
+            if (wheelchairFilter) "Neutral" else null
         )
         val nearestByType: List<AmenityDetail> = if (nearestAvailableFilter) {
             if (selectedTypes.isNotEmpty()) {
@@ -426,7 +426,7 @@ fun MapScreen(
             return
         }
 
-        if (isNavigating) {
+        if (isNavigating && amenityClosedInRoute) {
             reroutedAmenity = finalFiltered[0]
             return
         }
@@ -1552,7 +1552,7 @@ fun MapScreen(
                                     "Would you like to reroute to the nearest available Women's restroom?",
                                     color = androidx.compose.ui.graphics.Color.White
                                 )
-                            } else {
+                            } else if (reroutedAmenity?.subType.equals("Neutral", true)) {
                                 applyCustomFilters(true, false, false, "open", false, false, false, true)
                                 Text(
                                     "Would you like to reroute to the nearest available Wheelchair Accessible restroom?",
@@ -1699,7 +1699,15 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     )
     style.addLayerAbove(
         SymbolLayer("amenity-layer", "amenity-source").withProperties(
-            iconImage("marker-icon"),
+            iconImage(
+                match(
+                    get("gender"),
+                    literal("icon-neutral"), // Default value
+                    stop("male", "icon-male"),
+                    stop("female", "icon-female"),
+                    stop("neutral", "icon-neutral")
+                )
+            ),
             iconSize(
                 interpolate(
                     exponential(1.5f),
@@ -1982,9 +1990,9 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                 )
             }
             // only store the first 7 restrooms from DB
-            if (amenities.size > 7) {
+            /* if (amenities.size > 7) {
                 amenities.subList(7, amenities.size).clear()
-            }
+            } */
             mapViewModel.storeAmenities(amenities)
         }
 }

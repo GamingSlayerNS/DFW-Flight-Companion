@@ -51,7 +51,7 @@ object Pathfinding {
             val (current, _) = pq.poll()
 
             if (current == end) break
-            if (!visited.add(current)) continue // Skip already-settled nodes
+            if (!visited.add(current)) continue
 
             for (edge in graph[current].orEmpty()) {
                 val neighbor = edge.target

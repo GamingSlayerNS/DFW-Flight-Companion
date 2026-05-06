@@ -197,22 +197,6 @@ fun MapScreen(
 
     LaunchedEffect(Unit) {
         NavigationGraphRepository.startListening()
-        /*
-        val functions = Firebase.functions
-        // ONLY if testing locally:
-        functions.useEmulator("10.0.2.2", 5001)
-
-        functions.getHttpsCallable("getNavigationGraph").call()
-            .addOnSuccessListener { result ->
-                @Suppress("UNCHECKED_CAST")
-                val data = result.getData() as? List<Map<String, Any>>
-                if (data != null) {
-                    graph = GraphBuilder.fromFirebase(data)
-                }
-            }
-            .addOnFailureListener { e ->
-                Log.e("Navigation", "Failed to fetch graph", e)
-            }*/
     }
 
     val navigationGraph by NavigationGraphRepository.navigationGraph.collectAsState()
@@ -688,6 +672,13 @@ fun MapScreen(
 
         // Calculate the route path
         val path = computeRoute(userLng, userLat, destLng, destLat) ?: return
+
+        val dx = userLng - destLng
+        val dy = userLat - destLat
+        if (dx * dx + dy * dy < CLOSE_THRESHOLD * CLOSE_THRESHOLD) {
+            cancelNavigation()
+            return
+        }
 
         if (isNavigating) {
             updateNavigationStep(destLng, destLat)

@@ -1,7 +1,8 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.navigation
 
 import kotlin.math.sqrt
 import java.util.PriorityQueue
+import kotlin.collections.iterator
 
 // Data Model
 data class Node(val lng: Double, val lat: Double)

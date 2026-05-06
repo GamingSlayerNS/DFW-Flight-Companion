@@ -1,7 +1,9 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.graphics.vector.ImageVector
 
 enum class Destination(

@@ -1,6 +1,5 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.amenities
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,20 +11,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-
-data class Amenity(
-    val id: String = "",
-    val name: String = "",
-    val type: String = "",
-    val subType: String = "",
-    val congestion: String = "",
-    val lastUpdated: Long = 0L,
-    val isAccessible: Boolean = false,
-    val nodeId: String = ""
-)
+import com.example.dfwflightcompanion.map.MapViewModel
+import com.example.dfwflightcompanion.Routes
+import com.example.dfwflightcompanion.helpers.Amenity
+import com.example.dfwflightcompanion.navigation.Destination
 
 @Composable
 fun AmenitiesScreen(

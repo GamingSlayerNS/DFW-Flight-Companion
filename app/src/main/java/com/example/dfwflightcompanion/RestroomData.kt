@@ -19,6 +19,7 @@ object RestroomData {
         createSet("se", 32.89735, -97.04425, "South East")
     ).flatten()
 
+
     private fun createSet(
         suffix: String,
         baseLat: Double,

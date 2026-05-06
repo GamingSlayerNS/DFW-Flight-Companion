@@ -7,6 +7,14 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.example.dfwflightcompanion.amenities.AmenitiesScreen
+import com.example.dfwflightcompanion.amenities.AmenityDetailsScreen
+import com.example.dfwflightcompanion.map.MapScreen
+import com.example.dfwflightcompanion.map.MapViewModel
+import com.example.dfwflightcompanion.navigation.Destination
+import com.example.dfwflightcompanion.profile.DisabilityProfileFormScreen
+import com.example.dfwflightcompanion.profile.DisabilityProfileViewModel
+import com.example.dfwflightcompanion.profile.ProfileScreen
 
 object Routes {
     const val AMENITY_DETAILS = "amenity_details/{amenityId}"

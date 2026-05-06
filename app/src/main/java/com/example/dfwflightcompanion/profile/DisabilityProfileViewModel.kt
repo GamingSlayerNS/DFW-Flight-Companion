@@ -1,4 +1,4 @@
-package com.example.dfwflightcompanion
+package com.example.dfwflightcompanion.profile
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -12,7 +12,7 @@ class DisabilityProfileViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = DisabilityProfileRepository(app.applicationContext)
 
     val profile: StateFlow<DisabilityProfile?> = repo.profileFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        .stateIn(viewModelScope, SharingStarted.Companion.WhileSubscribed(5_000), null)
 
     fun save(profile: DisabilityProfile) {
         viewModelScope.launch { repo.save(profile) }

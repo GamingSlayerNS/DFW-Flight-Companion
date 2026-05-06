@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
+import com.example.dfwflightcompanion.navigation.BottomNavigationBar
 import com.example.dfwflightcompanion.ui.theme.DFWFlightCompanionTheme
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.FirebaseFirestore
@@ -33,7 +34,6 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     val db = FirebaseFirestore.getInstance()
-
                     if (shouldPublishGraph) {
                         statusMessage = "Publishing Navigation Graph..."
                         Firebase.functions.getHttpsCallable("publishNavigationGraph").call()
@@ -75,31 +75,23 @@ class MainActivity : ComponentActivity() {
 
     private fun populateRestrooms(db: FirebaseFirestore, onComplete: () -> Unit) {
         Log.d("FirestoreDB", "Populating restrooms...")
-        
+
+
+
         // 1. First, delete all existing amenities to avoid duplicates
         db.collection("Amenity").get().addOnSuccessListener { result ->
             val batch = db.batch()
+
             result.forEach { batch.delete(it.reference) }
-            
+
+
             batch.commit().addOnSuccessListener {
                 Log.d("FirestoreDB", "Wiped old amenities. Adding new ones...")
                 
                 // 2. Add the new restrooms from RestroomData
                 val addBatch = db.batch()
                 try {
-                    val sets = RestroomData.restroomSets
-                    sets.forEach { restroom ->
-                        val docRef = db.collection("Amenity").document(restroom.id)
-                        addBatch.set(docRef, hashMapOf(
-                            "AmenityID" to restroom.id,
-                            "Name" to restroom.name,
-                            "AmenityType" to "Restroom",
-                            "SubTypeName" to restroom.type,
-                            "Congestion" to restroom.congestion,
-                            "IsAccessible" to restroom.isAccessible,
-                            "NodeID" to restroom.nodeId
-                        ))
-                    }
+
 
                     addBatch.commit().addOnCompleteListener { task ->
                         if (task.isSuccessful) {
@@ -116,6 +108,35 @@ class MainActivity : ComponentActivity() {
             }.addOnFailureListener { e ->
                 Log.e("FirestoreDB", "Failed to wipe amenities", e)
                 onComplete()
+            }
+            val routingJson = assets.open("mapdata/routing.geojson").bufferedReader().use { it.readText() }
+            val routingObj = JSONObject(routingJson)
+            val routingFeatures = routingObj.getJSONArray("features")
+            val congestionLevels = listOf("Low", "Medium", "High")
+
+            for (i in 0 until routingFeatures.length()) {
+                val feature = routingFeatures.getJSONObject(i)
+                val props = feature.getJSONObject("properties")
+                if (props.optString("type") == "poi") {
+                    val id = props.optString("id")
+                    val name = props.optString("name")
+                    val subtype = props.optString("gender")
+                    val isAccessible = props.optString("gender") == "neutral"
+                    val nodeId = props.optString("id")
+
+                    db.collection("Amenity").document(id).set(
+                        hashMapOf(
+                            "AmenityID" to id,
+                            "Name" to name,
+                            "AmenityType" to "Restroom",
+                            "SubTypeName" to subtype,
+                            "Congestion" to congestionLevels.random(),
+                            "IsAccessible" to isAccessible,
+                            "NodeID" to nodeId
+                        )
+                    )
+                }
+
             }
         }
     }
@@ -148,6 +169,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Build MapBackground, MapNode, PathEdge, and Amenity
     private fun seedFromGeoJson(db: FirebaseFirestore, onComplete: () -> Unit) {
         try {
             Log.d("FirestoreDB", "Starting GeoJSON Seed...")
@@ -159,8 +181,8 @@ class MainActivity : ComponentActivity() {
                 "Center" to GeoPoint(32.8974, -97.0446)
             ))
 
-            // 2. Parse routing.geojson for Nodes and Edges
-            val routingJson = assets.open("routing.geojson").bufferedReader().use { it.readText() }
+            // 2. Parse routing.geojson for Nodes, Edges and Amenities
+            val routingJson = assets.open("mapdata/routing.geojson").bufferedReader().use { it.readText() }
             val routingObj = JSONObject(routingJson)
             val routingFeatures = routingObj.getJSONArray("features")
 
@@ -179,7 +201,7 @@ class MainActivity : ComponentActivity() {
                         "type" to "poi",
                         "name" to props.optString("name"),
                         "level" to props.optInt("level"),
-                        "weight" to props.optDouble("weight"),
+                        "gender" to props.optString("gender"),
                         "coordinates" to GeoPoint(coords.getDouble(1), coords.getDouble(0))
                     ))
                 } else if (type == "path") {
@@ -193,15 +215,15 @@ class MainActivity : ComponentActivity() {
                         "id" to id,
                         "type" to "path",
                         "name" to props.optString("name"),
-                        "weight" to props.optDouble("weight"),
                         "coordinates" to pathPoints,
                         "isOpen" to true
                     ))
                 }
             }
 
+
             // 3. Parse floorplan.geojson for MapBackgrounds (Polygons)
-            val floorplanJson = assets.open("floorplan.geojson").bufferedReader().use { it.readText() }
+            val floorplanJson = assets.open("mapdata/floorplan.geojson").bufferedReader().use { it.readText() }
             val floorplanObj = JSONObject(floorplanJson)
             val floorplanFeatures = floorplanObj.getJSONArray("features")
 
@@ -210,7 +232,7 @@ class MainActivity : ComponentActivity() {
                 val props = feature.getJSONObject("properties")
                 val geom = feature.getJSONObject("geometry")
                 val id = props.optString("id")
-                
+
                 if (geom.getString("type") == "Polygon") {
                     val rings = geom.getJSONArray("coordinates")
                     val exteriorRing = rings.getJSONArray(0)
@@ -225,6 +247,7 @@ class MainActivity : ComponentActivity() {
                         "type" to props.optString("type"),
                         "name" to props.optString("name"),
                         "level" to props.optInt("level"),
+                        "gender" to props.optString("gender"),
                         "coordinates" to points
 
                     ))
@@ -280,4 +303,5 @@ class MainActivity : ComponentActivity() {
             Log.e("FirestoreDB", "GeoJSON Seed Failed", e)
         }
     }
+
 }

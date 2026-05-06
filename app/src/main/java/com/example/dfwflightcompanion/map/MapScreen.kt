@@ -841,7 +841,7 @@ fun MapScreen(
         }
 
         val (lng, lat) = currentDestination ?: return@LaunchedEffect
-        val node = mapNodes.find { it.latitude == String.format(Locale.US, "%.5f", lat).toDouble() && it.longitude == String.format(Locale.US, "%.5f", lng).toDouble() } ?: return@LaunchedEffect
+        val node = mapNodes.find { (it.latitude == String.format(Locale.US, "%.5f", lat).toDouble() || it.latitude == String.format(Locale.US, "%.6f", lat).toDouble()) && (it.longitude == String.format(Locale.US, "%.5f", lng).toDouble() || it.longitude == String.format(Locale.US, "%.6f", lng).toDouble()) } ?: return@LaunchedEffect
         val amenity = amenities.firstOrNull { it.nodeId == node.id } ?: return@LaunchedEffect
         if (isNavigating && !amenity.isAccessible) {
             amenityClosedInRoute = true
@@ -1528,53 +1528,98 @@ fun MapScreen(
                 }
             }
             if (amenityClosedInRoute) {
+                val lat = currentDestination?.second
+                val lng = currentDestination?.first
+                val currDest = amenities.find { it.nodeId == mapNodes.find { (it.latitude == String.format(Locale.US, "%.5f", lat).toDouble() || it.latitude == String.format(Locale.US, "%.6f", lat).toDouble()) && (it.longitude == String.format(Locale.US, "%.5f", lng).toDouble() || it.longitude == String.format(Locale.US, "%.6f", lng).toDouble()) }?.id }
+                val reroutedNode = mapNodes.find { it.id == reroutedAmenity?.nodeId }
                 AnimatedVisibility(
                     visible = amenityClosedInRoute,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
                     Surface(
-                        modifier = Modifier.padding(horizontal = 8.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
                         color = androidx.compose.ui.graphics.Color(0xFF1A1A1A),
                         shape = RoundedCornerShape(12.dp),
                         tonalElevation = 4.dp
                     ) {
                         Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
                             Text("Destination Closed", fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color.White)
-                            if (reroutedAmenity?.subType.equals("Male", true)) {
+                            if (currDest?.subType.equals("Male", true)) {
                                 applyCustomFilters(false, true, false, "open", false, false, false, true)
                                 Text(
                                     "Would you like to reroute to the nearest available Men's restroom?",
                                     color = androidx.compose.ui.graphics.Color.White
                                 )
-                            } else if (reroutedAmenity?.subType.equals("Female", true)) {
+                            } else if (currDest?.subType.equals("Female", true)) {
                                 applyCustomFilters(false, false, true, "open", false, false, false, true)
                                 Text(
                                     "Would you like to reroute to the nearest available Women's restroom?",
                                     color = androidx.compose.ui.graphics.Color.White
                                 )
-                            } else if (reroutedAmenity?.subType.equals("Neutral", true)) {
+                            } else if (currDest?.subType.equals("Neutral", true)) {
                                 applyCustomFilters(true, false, false, "open", false, false, false, true)
                                 Text(
                                     "Would you like to reroute to the nearest available Wheelchair Accessible restroom?",
                                     color = androidx.compose.ui.graphics.Color.White
                                 )
                             }
-                            val rerouteDist = reroutedAmenity?.let { distanceToUser(it) }
+                            val rerouteDist = reroutedAmenity?.let { distanceToUser(it) }?.toInt()
                             val rerouteTime = rerouteDist?.div(40.0)?.toInt()
-                            Text("Estimated Distance: ${"${rerouteDist}ft (${rerouteTime}min)"}")
+                            if (rerouteTime?.equals(0) == true)
+                                Text("Estimated Distance: ${"${rerouteDist}ft (Less than 1min)"}",
+                                    color = androidx.compose.ui.graphics.Color.White)
+                            else
+                                Text("Estimated Distance: ${"${rerouteDist}ft (${rerouteTime}min)"}",
+                                    color = androidx.compose.ui.graphics.Color.White)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                // cancel reroute button
                                 TextButton(onClick = {
                                     amenityClosedInRoute = false
                                     reroutedAmenity = null
+                                    val bearing = mapRef.value?.cameraPosition?.bearing
+                                    if (bearing != null) {
+                                        mapRef.value?.animateCamera(
+                                            CameraUpdateFactory.newCameraPosition(
+                                                CameraPosition.Builder()
+                                                    .target(
+                                                        LatLng(
+                                                            userLocation.value.latitude,
+                                                            userLocation.value.longitude
+                                                        )
+                                                    )
+                                                    .zoom(18.0)
+                                                    .tilt(45.0)
+                                                    .bearing(bearing) // Face direction of the user
+                                                    .build()
+                                            ),
+                                            500
+                                        )
+                                    }
                                 }) { Text("Cancel") }
+                                // accept reroute button
                                 Button(onClick = {
                                     amenityClosedInRoute = false
-                                    Log.d("REROUTED", "${reroutedAmenity?.nodeId}")
+                                    if (reroutedNode != null) {
+                                        startNavigation(reroutedNode.longitude, reroutedNode.latitude)
+                                        currentDestination = (reroutedNode.longitude to reroutedNode.latitude)
+                                    }
                                     reroutedAmenity = null
                                 }) { Text("Reroute") }
                             }
                         }
                     }
+                }
+                if (reroutedNode != null) {
+                    mapRef.value?.animateCamera(
+                        CameraUpdateFactory.newCameraPosition(
+                            CameraPosition.Builder()
+                                .target(LatLng(reroutedNode.latitude, reroutedNode.longitude))
+                                .zoom(19.0)
+                                .bearing(180.0) // Face south
+                                .tilt(45.0)
+                                .build()
+                        ), 2000
+                    )
                 }
             }
         }

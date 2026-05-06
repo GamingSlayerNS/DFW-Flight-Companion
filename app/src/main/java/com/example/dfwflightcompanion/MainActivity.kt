@@ -85,14 +85,12 @@ class MainActivity : ComponentActivity() {
             result.forEach { batch.delete(it.reference) }
 
 
-            batch.commit().addOnSuccessListener {
+            /*batch.commit().addOnSuccessListener {
                 Log.d("FirestoreDB", "Wiped old amenities. Adding new ones...")
                 
                 // 2. Add the new restrooms from RestroomData
                 val addBatch = db.batch()
                 try {
-
-
                     addBatch.commit().addOnCompleteListener { task ->
                         if (task.isSuccessful) {
                             Log.d("FirestoreDB", "Successfully added restrooms.")
@@ -108,7 +106,7 @@ class MainActivity : ComponentActivity() {
             }.addOnFailureListener { e ->
                 Log.e("FirestoreDB", "Failed to wipe amenities", e)
                 onComplete()
-            }
+            }*/
             val routingJson = assets.open("mapdata/routing.geojson").bufferedReader().use { it.readText() }
             val routingObj = JSONObject(routingJson)
             val routingFeatures = routingObj.getJSONArray("features")
@@ -121,7 +119,6 @@ class MainActivity : ComponentActivity() {
                     val id = props.optString("id")
                     val name = props.optString("name")
                     val subtype = props.optString("gender")
-                    val isAccessible = props.optString("gender") == "neutral"
                     val nodeId = props.optString("id")
 
                     db.collection("Amenity").document(id).set(
@@ -131,7 +128,7 @@ class MainActivity : ComponentActivity() {
                             "AmenityType" to "Restroom",
                             "SubTypeName" to subtype,
                             "Congestion" to congestionLevels.random(),
-                            "IsAccessible" to isAccessible,
+                            "IsAccessible" to true,
                             "NodeID" to nodeId
                         )
                     )

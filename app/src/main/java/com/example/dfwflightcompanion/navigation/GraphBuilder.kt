@@ -95,7 +95,6 @@ object GraphBuilder {
                     if (geometry.getString("type") == "LineString") {
                         val coords = geometry.getJSONArray("coordinates")
                         val pathType = properties.optString("id", "path")
-                        // Respect one-way directional property from GeoJSON
                         val isOneWay = properties.optBoolean("oneway", false)
 
                         for (j in 0 until coords.length() - 1) {

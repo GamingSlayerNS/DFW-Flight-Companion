@@ -46,3 +46,23 @@ data class Amenity(
     val isAccessible: Boolean = false,
     val nodeId: String = ""
 )
+
+data class RoutingNode(
+    val name: String = "",
+    val lat: Double = 0.0,
+    val lng: Double = 0.0,
+    val level: Int = 0,
+    val wait_time: Double = 0.0
+)
+
+data class RoutingEdge(
+    val distance: Double = 0.0,
+    val type: String = "",
+    val congestion: Double = 0.0
+)
+
+data class RoutingGraph(
+    val nodes: Map<String, RoutingNode> = emptyMap(),
+    // Edges are a Map of Node ID -> Map of Connected Node ID -> Edge Details
+    val edges: Map<String, Map<String, RoutingEdge>> = emptyMap()
+)

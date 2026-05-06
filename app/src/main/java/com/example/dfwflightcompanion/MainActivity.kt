@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
                     val db = FirebaseFirestore.getInstance()
                     if (shouldPublishGraph) {
                         statusMessage = "Publishing Navigation Graph..."
-                        Firebase.functions.getHttpsCallable("publishNavigationGraph").call()
+                        Firebase.functions.getHttpsCallable("publishGraphToRealtime").call()
                             .addOnSuccessListener {
                                 Log.d("FirestoreDB", "Navigation graph published successfully")
                                 statusMessage = "Graph Published!"
@@ -76,14 +76,11 @@ class MainActivity : ComponentActivity() {
     private fun populateRestrooms(db: FirebaseFirestore, onComplete: () -> Unit) {
         Log.d("FirestoreDB", "Populating restrooms...")
 
-
-
         // 1. First, delete all existing amenities to avoid duplicates
         db.collection("Amenity").get().addOnSuccessListener { result ->
             val batch = db.batch()
 
             result.forEach { batch.delete(it.reference) }
-
 
             batch.commit().addOnSuccessListener {
                 Log.d("FirestoreDB", "Wiped old amenities. Adding new ones...")
@@ -91,8 +88,6 @@ class MainActivity : ComponentActivity() {
                 // 2. Add the new restrooms from RestroomData
                 val addBatch = db.batch()
                 try {
-
-
                     addBatch.commit().addOnCompleteListener { task ->
                         if (task.isSuccessful) {
                             Log.d("FirestoreDB", "Successfully added restrooms.")

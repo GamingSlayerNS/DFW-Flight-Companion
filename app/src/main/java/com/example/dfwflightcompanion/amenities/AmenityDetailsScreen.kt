@@ -215,7 +215,7 @@ private fun AmenityDetailsContent(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (details.subType.equals("Handicap", true))
+                        if (details.isAccessible)
                             "Wheelchair Accessible"
                         else
                             "Not Wheelchair Accessible"

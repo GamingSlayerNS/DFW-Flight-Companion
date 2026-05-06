@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
                     val id = props.optString("id")
                     val name = props.optString("name")
                     val subtype = props.optString("gender")
-                    val isAccessible = (props.optString("gender") == "neutral")
+                    val isAccessible = props.optString("gender") == "neutral"
                     val nodeId = props.optString("id")
 
                     db.collection("Amenity").document(id).set(

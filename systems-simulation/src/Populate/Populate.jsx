@@ -1,10 +1,8 @@
 import routingRaw from "/src/assets/mapdata/routing.geojson?raw";
 import floorplanRaw from "/src/assets/mapdata/floorplan.geojson?raw";
-import { collection, getDocs, writeBatch, doc } from "firebase/firestore";
+import { collection, getDocs, writeBatch, doc, GeoPoint } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
-import { GeoPoint } from "firebase/firestore";
-
 
 const GEO_COLLECTIONS = ["MapBackground", "MapNode", "PathEdge"];
 const MISC_COLLECTIONS = ["Terminal", "AmenityUnit", "AmenitySchedule", "Sensor", "User", "UserReports"];
@@ -40,17 +38,14 @@ async function populateBackground() {
         const geom = feature.geometry;
         if (geom.type !== "Polygon") return;
 
-        const points = geom.coordinates[0].map(([lng, lat]) => ({
-            latitude: lat,
-            longitude: lng,
-        }));
+        const points = geom.coordinates[0].map(([lng, lat]) => new GeoPoint(lat, lng));
 
-        batch.set(doc(db, "MapBackground", props.id), {
+        batch.set(doc(db, "MapBackgroundTest", props.id), {
             id: props.id,
             type: props.type,
             name: props.name,
             level: props.level,
-            gender: props.gender,
+            gender: props.gender ?? '',
             coordinates: points,
         });
         count++;
@@ -72,14 +67,16 @@ async function populateNodes() {
 
         const [lng, lat] = geom.coordinates;
 
-        batch.set(doc(db, "MapNode", props.id), {
-            id: props.id,
-            terminalId: "Terminal D",
-            type: "poi",
-            name: props.name,
-            level: props.level,
-            gender: props.gender,
-            coordinates: { latitude: lat, longitude: lng },
+        batch.set(doc(db, "MapNodeTest", props.id), {
+            AmenityID: props.id,
+            AmenityType: "Restroom",
+            Congestion: "Low",
+            IsAccessible: true,
+            Name: props.name,
+            NodeID: props.id,
+            SubTypeName: props.gender,
+            WaitTime: 0.0,
+            coordinates: [new GeoPoint(lat, lng)],
         });
         count++;
     });
@@ -100,20 +97,16 @@ async function populatePathEdges() {
 
         const coords = geom.coordinates;
 
-        // Split into individual 2-point segments
         for (let i = 0; i < coords.length - 1; i++) {
             const [lngA, latA] = coords[i];
             const [lngB, latB] = coords[i + 1];
             const segmentId = coords.length > 2 ? `${props.id}_${i+1}` : props.id;
             const segmentName = coords.length > 2 ? `${props.name}_${i+1}` : props.id;
-            batch.set(doc(db, "PathEdge", segmentId), {
+            batch.set(doc(db, "PathEdgeTest", segmentId), {
                 id: segmentId,
                 type: "path",
                 name: segmentName,
-                coordinates: [
-                    { latitude: latA, longitude: lngA },
-                    { latitude: latB, longitude: lngB },
-                ],
+                coordinates: [new GeoPoint(latA, lngA), new GeoPoint(latB, lngB)],
                 isOpen: true,
             });
             segmentCount++;
@@ -129,6 +122,7 @@ async function populateGeoCollection() {
     await populateBackground();
     await populatePathEdges();
 }
+
 async function publishNavigationGraph() {
     try {
         const fn = httpsCallable(functions, "publishGraphToRealtime");
@@ -137,7 +131,7 @@ async function publishNavigationGraph() {
     } catch (e) {
         console.error("publishNavigationGraph failed:", e);
     }
-};
+}
 
 async function populateAmenity(){
     try {
@@ -149,7 +143,6 @@ async function populateAmenity(){
 
         const routingData = JSON.parse(routingRaw);
         const routingFeatures = routingData.features;
-        const congestionLevels = ["Low", "Medium", "High"];
 
         const addBatch = writeBatch(db);
         routingFeatures.forEach((feature) => {
@@ -184,7 +177,7 @@ async function populateMisc() {
     batch.set(doc(collection(db, "Terminal")), {
         Name: "Terminal D",
         Description: "DFW International Terminal",
-        Center: { latitude: 32.8974, longitude: -97.0446 },
+        Center: new GeoPoint(32.8974, -97.0446),
     });
 
     batch.set(doc(collection(db, "AmenityUnit")), {

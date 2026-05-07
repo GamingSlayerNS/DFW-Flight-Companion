@@ -233,14 +233,16 @@ exports.publishNavigationGraph = onCall(async (request) => {
 
 /**
  * Admin Function: Publishes the graph to the real-time database.
+ * Neighbors include an edge_id field. PathEdges are stored with a congestion field.
  */
 exports.publishGraphToRealtime = onCall(async (request) => {
     try {
-        logger.info("Publishing Navigation Graph...");
+        logger.info("Publishing Navigation Graph to Realtime Database...");
         const snapshot = await db.collection("PathEdge").get();
 
         const nodePool = [];
         const graph = {};
+        const pathEdges = {};
         const MERGE_THRESHOLD = 1e-5;
 
         const getOrCreateNode = (lat, lng) => {
@@ -255,51 +257,69 @@ exports.publishGraphToRealtime = onCall(async (request) => {
             return newNode;
         };
 
+        const rtdbKey = (lng, lat) =>
+            `${lng},${lat}`.replace(/\./g, "_");
+
         snapshot.forEach((doc) => {
             const data = doc.data();
             if (data.type !== "path") return;
+            const edgeId = doc.id;
             const coords = data.coordinates || [];
+
+            // Store PathEdge for RTDB with congestion field
+            pathEdges[edgeId] = {
+                id: edgeId,
+                name: data.name ?? null,
+                isOpen: data.isOpen ?? true,
+                congestion: 0,
+                coordinates: coords.map((p) => ({
+                    lat: p.latitude,
+                    lng: p.longitude,
+                })),
+            };
+
             for (let i = 0; i < coords.length - 1; i++) {
                 const nodeA = getOrCreateNode(coords[i].latitude, coords[i].longitude);
                 const nodeB = getOrCreateNode(coords[i + 1].latitude, coords[i + 1].longitude);
                 const keyA = `${nodeA.lng},${nodeA.lat}`;
                 const keyB = `${nodeB.lng},${nodeB.lat}`;
-                if (!graph[keyA]) graph[keyA] = { node: nodeA, neighbors: [] };
-                if (!graph[keyB]) graph[keyB] = { node: nodeB, neighbors: [] };
-                if (!graph[keyA].neighbors.some((n) => n.lat === nodeB.lat && n.lng === nodeB.lng)) {
-                    graph[keyA].neighbors.push({ ...nodeB, congestion: 0 });
+
+                if (!graph[keyA]) graph[keyA] = { node: nodeA, neighbors: {} };
+                if (!graph[keyB]) graph[keyB] = { node: nodeB, neighbors: {} };
+
+                const rkA = rtdbKey(nodeA.lng, nodeA.lat);
+                const rkB = rtdbKey(nodeB.lng, nodeB.lat);
+
+                if (!graph[keyA].neighbors[rkB]) {
+                    graph[keyA].neighbors[rkB] = { ...nodeB, congestion: 0, edge_id: edgeId };
                 }
-                if (!graph[keyB].neighbors.some((n) => n.lat === nodeA.lat && n.lng === nodeA.lng)) {
-                    graph[keyB].neighbors.push({ ...nodeA, congestion: 0 });
+                if (!graph[keyB].neighbors[rkA]) {
+                    graph[keyB].neighbors[rkA] = { ...nodeA, congestion: 0, edge_id: edgeId };
                 }
             }
         });
 
-        const graphData = Object.values(graph);
-
-        // Build a keyed object for the Realtime Database
+        // Build keyed graph payload for RTDB
         const rtdbPayload = {};
-        graphData.forEach((entry, index) => {
-            const nodeKey = `${entry.node.lng},${entry.node.lat}`.replace(/\./g, "_");
+        Object.values(graph).forEach((entry) => {
+            const nodeKey = rtdbKey(entry.node.lng, entry.node.lat);
             rtdbPayload[nodeKey] = {
                 node: entry.node,
-                neighbors: entry.neighbors.reduce((acc, neighbor, i) => {
-                    const neighborKey = `${neighbor.lng},${neighbor.lat}`.replace(/\./g, "_");
-                    acc[neighborKey] = neighbor;
-                    return acc;
-                }, {}),
+                neighbors: entry.neighbors,
             };
         });
 
-        // Push to Firebase Realtime Database
-        await rtdb.ref("MapData/currentGraph").set({
+        // Push graph and edges to Realtime Database
+        await rtdb.ref("MapData/CurrentGraph").set({
             data: rtdbPayload,
+            edges: pathEdges,
             lastUpdated: Date.now(),
         });
 
-        return { success: true, nodeCount: graphData.length };
+        logger.info(`Graph published: ${Object.keys(graph).length} nodes, ${Object.keys(pathEdges).length} edges.`);
+        return { success: true, nodeCount: Object.keys(graph).length, edgeCount: Object.keys(pathEdges).length };
     } catch (error) {
-        logger.error("Error publishing navigation graph:", error);
+        logger.error("Error publishing navigation graph to Realtime Database:", error);
         throw new HttpsError("internal", "Failed to publish graph.");
     }
 });

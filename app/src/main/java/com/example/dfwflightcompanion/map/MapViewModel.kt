@@ -7,11 +7,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.example.dfwflightcompanion.helpers.Amenity
 import com.example.dfwflightcompanion.helpers.AmenityDetail
+import org.maplibre.android.geometry.LatLng
 
 class MapViewModel : ViewModel() {
     var selectedAmenityId by mutableStateOf<String?>(null)
         private set
     var amenities by mutableStateOf<List<Amenity>>(emptyList())
+        private set
+
+    var userLocation by mutableStateOf(LatLng(32.897546, -97.044471))
         private set
 
     init {
@@ -54,6 +58,10 @@ class MapViewModel : ViewModel() {
                 nodeId = detail.nodeId
             )
         }
+    }
+
+    fun updateLocation(newLocation: LatLng) {
+        userLocation = newLocation
     }
 
     var autoStartNavigation by mutableStateOf(false)

@@ -185,6 +185,8 @@ fun MapScreen(
 
     var noFilteringResultsFound by remember { mutableStateOf(false) }
     var amenityClosedInRoute by remember { mutableStateOf(false) }
+    var hasArrived by remember { mutableStateOf(false) }
+    var saveDestCoordsForArrivedMsg by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     var selectionFromAmenityScreen by remember { mutableStateOf<String?>(null) }
     var cameraBearing by remember { mutableStateOf(0.0) } // tracking the camera angle
@@ -296,6 +298,7 @@ fun MapScreen(
         val distance = sqrt(dx * dx + dy * dy)
         if(pathNodes.size == 2 && distance < CLOSE_THRESHOLD){
             cancelNavigation()
+            hasArrived = true
             return null
         }
 
@@ -483,6 +486,8 @@ fun MapScreen(
         // Retrieving user's location
         val userLng = userLocation.longitude
         val userLat = userLocation.latitude
+
+        saveDestCoordsForArrivedMsg = destLng to destLat
 
         // Calculate the route path
         val path = computeRoute(userLng, userLat, destLng, destLat) ?: return@startNav
@@ -929,8 +934,8 @@ fun MapScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Custom Filter Button (displayed only when not navigating)
         if (!isNavigating) {
+            // Custom Filter Button (displayed only when not navigating)
             Box(
                 modifier = filterButtonPadding
                     .size(54.dp)
@@ -955,10 +960,82 @@ fun MapScreen(
                     tint = androidx.compose.ui.graphics.Color.Black
                 )
             }
+            // Confirmation message when user arrives at destination
+            if (hasArrived) {
+                val arrivedAmenityName = amenities.find { it.nodeId == mapNodes.find { (it.latitude == String.format(Locale.US, "%.5f", saveDestCoordsForArrivedMsg?.second).toDouble() || it.latitude == String.format(Locale.US, "%.6f", saveDestCoordsForArrivedMsg?.second).toDouble()) && (it.longitude == String.format(Locale.US, "%.5f", saveDestCoordsForArrivedMsg?.first).toDouble() || it.longitude == String.format(Locale.US, "%.6f", saveDestCoordsForArrivedMsg?.first).toDouble()) }?.id }?.name
+                AnimatedVisibility(
+                    visible = hasArrived,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(
+                                width = 1.dp,
+                                color = androidx.compose.ui.graphics.Color.LightGray,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .background(androidx.compose.ui.graphics.Color.White)
+                            .padding(horizontal = 18.dp, vertical = 24.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.arrived_icon_black),
+                                contentDescription = null,
+                                modifier = Modifier.size(50.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column {
+                                Row {
+                                    Text(
+                                        "You have arrived!",
+                                        color = androidx.compose.ui.graphics.Color.Black,
+                                        fontFamily = FontFamily.Serif,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 20.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row {
+                                    Text(
+                                        "Destination: $arrivedAmenityName",
+                                        color = androidx.compose.ui.graphics.Color.Black,
+                                        fontFamily = FontFamily.Serif,
+                                        fontWeight = FontWeight.Normal,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Button(
+                                onClick = { hasArrived = false },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp)
+                            ) {
+                                Text("Close", color = androidx.compose.ui.graphics.Color.White)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // View Amenity Details Box
         if (showAmenityBox) {
+            hasArrived = false
             val selectedBackground = remember(selectedDest, mapBackgrounds) {
                 findBackgroundForSelectedDest(selectedDest, mapBackgrounds)
             }
@@ -1166,8 +1243,9 @@ fun MapScreen(
             }
         }
 
-        // AlertDialog with Checkboxes
+        // Custom Filters with Checkboxes
         if (showFilterDialog) {
+            hasArrived = false
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1612,26 +1690,30 @@ fun MapScreen(
                         tonalElevation = 4.dp
                     ) {
                         Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
-                            Text("Destination Closed", fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color.White)
+                            Text("Destination Closed", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = androidx.compose.ui.graphics.Color.White)
                             if (currDest?.subType.equals("Male", true)) {
+                                Spacer(modifier = Modifier.height(4.dp))
                                 applyCustomFilters(false, true, false, "open", false, false, false, true)
                                 Text(
                                     "Would you like to reroute to the nearest available Men's restroom?",
                                     color = androidx.compose.ui.graphics.Color.White
                                 )
                             } else if (currDest?.subType.equals("Female", true)) {
+                                Spacer(modifier = Modifier.height(4.dp))
                                 applyCustomFilters(false, false, true, "open", false, false, false, true)
                                 Text(
                                     "Would you like to reroute to the nearest available Women's restroom?",
                                     color = androidx.compose.ui.graphics.Color.White
                                 )
                             } else if (currDest?.subType.equals("Neutral", true)) {
+                                Spacer(modifier = Modifier.height(4.dp))
                                 applyCustomFilters(true, false, false, "open", false, false, false, true)
                                 Text(
                                     "Would you like to reroute to the nearest available Wheelchair Accessible restroom?",
                                     color = androidx.compose.ui.graphics.Color.White
                                 )
                             }
+                            Spacer(modifier = Modifier.height(4.dp))
                             val rerouteDist = reroutedAmenity?.let { distanceToUser(it) }?.toInt()
                             val rerouteTime = rerouteDist?.div(40.0)?.toInt()
                             if (rerouteTime?.equals(0) == true)
@@ -1640,40 +1722,48 @@ fun MapScreen(
                             else
                                 Text("Estimated Distance: ${"${rerouteDist}ft (${rerouteTime}min)"}",
                                     color = androidx.compose.ui.graphics.Color.White)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                 // cancel reroute button
-                                TextButton(onClick = {
-                                    amenityClosedInRoute = false
-                                    reroutedAmenity = null
-                                    val bearing = mapRef.value?.cameraPosition?.bearing
-                                    if (bearing != null) {
-                                        mapRef.value?.animateCamera(
-                                            CameraUpdateFactory.newCameraPosition(
-                                                CameraPosition.Builder()
-                                                    .target(
-                                                        LatLng(
-                                                            userLocation.latitude,
-                                                            userLocation.longitude
+                                Button(
+                                    onClick = {
+                                        amenityClosedInRoute = false
+                                        reroutedAmenity = null
+                                        val bearing = mapRef.value?.cameraPosition?.bearing
+                                        if (bearing != null) {
+                                            mapRef.value?.animateCamera(
+                                                CameraUpdateFactory.newCameraPosition(
+                                                    CameraPosition.Builder()
+                                                        .target(
+                                                            LatLng(
+                                                                userLocation.latitude,
+                                                                userLocation.longitude
+                                                            )
                                                         )
-                                                    )
-                                                    .zoom(18.0)
-                                                    .tilt(45.0)
-                                                    .bearing(bearing) // Face direction of the user
-                                                    .build()
-                                            ),
-                                            500
-                                        )
-                                    }
-                                }) { Text("Cancel") }
+                                                        .zoom(18.0)
+                                                        .tilt(45.0)
+                                                        .bearing(bearing) // Face direction of the user
+                                                        .build()
+                                                ),
+                                                500
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("Cancel") }
+                                Spacer(modifier = Modifier.width(12.dp))
                                 // accept reroute button
-                                Button(onClick = {
-                                    amenityClosedInRoute = false
-                                    if (reroutedNode != null) {
-                                        startNavigation(reroutedNode.longitude, reroutedNode.latitude)
-                                        currentDestination = (reroutedNode.longitude to reroutedNode.latitude)
-                                    }
-                                    reroutedAmenity = null
-                                }) { Text("Reroute") }
+                                Button(
+                                    onClick = {
+                                        amenityClosedInRoute = false
+                                        if (reroutedNode != null) {
+                                            startNavigation(reroutedNode.longitude, reroutedNode.latitude)
+                                            currentDestination = (reroutedNode.longitude to reroutedNode.latitude)
+                                        }
+                                        reroutedAmenity = null
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("Reroute") }
                             }
                         }
                     }

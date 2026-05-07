@@ -375,8 +375,6 @@ fun MapScreen(
     fun distanceToUser(amenity: AmenityDetail): Double {
         val userLng = userLocation.longitude
         val userLat = userLocation.latitude
-        val userLng = userLocation.longitude
-        val userLat = userLocation.latitude
         val selectedRR = mapNodes.find { it.id == amenity.nodeId } ?: return Double.POSITIVE_INFINITY
         val route = computeRoute(userLng, userLat,selectedRR.longitude,selectedRR.latitude) ?: return Double.POSITIVE_INFINITY
 

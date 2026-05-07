@@ -6,8 +6,152 @@ import { db, functions } from "../firebase";
 import { GeoPoint } from "firebase/firestore";
 
 
-function Populate(){
-    const populateRestrooms = async () => {
+const GEO_COLLECTIONS = ["MapBackground", "MapNode", "PathEdge"];
+const MISC_COLLECTIONS = ["Terminal", "AmenityUnit", "AmenitySchedule", "Sensor", "User", "UserReports"];
+
+async function wipeGeoCollections() {
+    for (const name of GEO_COLLECTIONS) {
+        const snapshot = await getDocs(collection(db, name));
+        const batch = writeBatch(db);
+        snapshot.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+        console.log(`Wiped ${name} (${snapshot.size} docs)`);
+    }
+}
+
+async function wipeMisc() {
+    for (const name of MISC_COLLECTIONS) {
+        const snapshot = await getDocs(collection(db, name));
+        const batch = writeBatch(db);
+        snapshot.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+        console.log(`Wiped ${name} (${snapshot.size} docs)`);
+    }
+}
+
+async function populateNodes() {
+    const routingData = JSON.parse(routingRaw);
+    const batch = writeBatch(db);
+    let count = 0;
+
+    routingData.features.forEach((feature) => {
+        const props = feature.properties;
+        const geom = feature.geometry;
+        if (props.type !== "poi") return;
+
+        const [lng, lat] = geom.coordinates;
+
+        batch.set(doc(db, "MapNode", props.id), {
+            id: props.id,
+            terminalId: "Terminal D",
+            type: "poi",
+            name: props.name,
+            level: props.level,
+            gender: props.gender,
+            coordinates: { latitude: lat, longitude: lng },
+        });
+        count++;
+    });
+
+    await batch.commit();
+    console.log(`MapNodes seeded: ${count} nodes.`);
+}
+
+async function populateBackground(){
+    const floorplanData = JSON.parse(floorplanRaw);
+    const batch = writeBatch(db);
+    let count = 0;
+
+    floorplanData.features.forEach((feature) => {
+        const props = feature.properties;
+        const geom = feature.geometry;
+        if (geom.type !== "Polygon") return;
+
+        const points = geom.coordinates[0].map(([lng, lat]) => ({
+            latitude: lat,
+            longitude: lng,
+        }));
+
+        batch.set(doc(db, "MapBackground", props.id), {
+            id: props.id,
+            type: props.type,
+            name: props.name,
+            level: props.level,
+            gender: props.gender,
+            coordinates: points,
+        });
+        count++;
+    });
+
+    await batch.commit();
+    console.log(`MapBackgrounds seeded: ${count} polygons.`);
+}
+
+async function populateNodes() {
+    const routingData = JSON.parse(routingRaw);
+    const batch = writeBatch(db);
+    let count = 0;
+
+    routingData.features.forEach((feature) => {
+        const props = feature.properties;
+        const geom = feature.geometry;
+        if (props.type !== "poi") return;
+
+        const [lng, lat] = geom.coordinates;
+
+        batch.set(doc(db, "MapNode", props.id), {
+            id: props.id,
+            terminalId: "Terminal D",
+            type: "poi",
+            name: props.name,
+            level: props.level,
+            gender: props.gender,
+            coordinates: { latitude: lat, longitude: lng },
+        });
+        count++;
+    });
+
+    await batch.commit();
+    console.log(`MapNodes seeded: ${count} nodes.`);
+}
+
+async function populatePathEdges() {
+    const routingData = JSON.parse(routingRaw);
+    const batch = writeBatch(db);
+    let segmentCount = 0;
+
+    routingData.features.forEach((feature) => {
+        const props = feature.properties;
+        const geom = feature.geometry;
+        if (props.type !== "path") return;
+
+        const coords = geom.coordinates;
+
+        // Split into individual 2-point segments
+        for (let i = 0; i < coords.length - 1; i++) {
+            const [lngA, latA] = coords[i];
+            const [lngB, latB] = coords[i + 1];
+            const segmentId = coords.length > 2 ? `${props.id}_${i+1}` : props.id;
+            const segmentName = coords.length > 2 ? `${props.name}_${i+1}` : props.id;
+            batch.set(doc(db, "PathEdge", segmentId), {
+                id: segmentId,
+                type: "path",
+                name: segmentName,
+                coordinates: [
+                    { latitude: latA, longitude: lngA },
+                    { latitude: latB, longitude: lngB },
+                ],
+                isOpen: true,
+            });
+            segmentCount++;
+        }
+    });
+
+    await batch.commit();
+    console.log(`PathEdges seeded: ${segmentCount} segments.`);
+}
+
+async function populateRestrooms(){
     try {
         const amenitySnapshot = await getDocs(collection(db, "Amenity"));
         const deleteBatch = writeBatch(db);
@@ -44,8 +188,9 @@ function Populate(){
     } catch (e) {
         console.error("Error during restroom population", e);
     }
-    };
+}
 
+function Populate(){
 
     const wipeAndSeed = async () => {
         const collections = [
@@ -207,7 +352,7 @@ function Populate(){
 
     const publishNavigationGraph = async () => {
         try {
-            const fn = httpsCallable(functions, "publishNavigationGraph");
+            const fn = httpsCallable(functions, "publishGraphToRealtime");
             const result = await fn();
             console.log("publishNavigationGraph result:", result.data);
         } catch (e) {

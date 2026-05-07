@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { rtdb } from "../firebase";
-import HallwayCard from "../HallwayCard/HallwayCard";
+import HallwayCard from "./HallwayCard";
 
 function Hallway() {
     const [nodes, setNodes] = useState({});
     const [status, setStatus] = useState("Connecting…");
 
     useEffect(() => {
-        const graphRef = ref(rtdb, "MapData/currentGraph/data");
+        const graphRef = ref(rtdb, "MapData/CurrentGraph/edges");
 
         const unsubscribe = onValue(
             graphRef,
             (snapshot) => {
                 const data = snapshot.val() ?? {};
                 setNodes(data);
-                setStatus(`Loaded ${Object.keys(data).length} nodes.`);
+                setStatus(`Loaded ${Object.keys(data).length} edges.`);
             },
             (error) => {
                 console.error("RTDB listener error:", error);
@@ -42,7 +42,7 @@ function Hallway() {
                 </div>
             ) : (
                 <p style={{ color: "var(--text-muted, #888)", fontSize: "14px" }}>
-                    No nodes found under <code>MapData/currentGraph</code>.
+                    No edges found under <code>MapData/currentGraph/edges</code>.
                 </p>
             )}
         </div>

@@ -153,7 +153,7 @@ fun AmenityCard(
                     }
                 }
 
-                if (amenity.subType.equals("Handicap", true)) {
+                if (amenity.subType.equals("Neutral", true)) {
                     Icon(
                         imageVector = Icons.Default.Accessible,
                         contentDescription = "Accessible",

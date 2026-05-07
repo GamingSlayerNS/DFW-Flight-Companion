@@ -44,7 +44,7 @@ async function populateBackground() {
             type: props.type,
             name: props.name,
             level: props.level,
-            gender: props.gender ?? '',
+            gender: props.gender ?? "",
             coordinates: points,
         });
         count++;
@@ -72,7 +72,7 @@ async function populateNodes() {
             type: "poi",
             name: props.name,
             level: props.level,
-            gender: props.gender ?? '',
+            gender: props.gender ?? "",
             coordinates: new GeoPoint(lat, lng),
         });
         count++;
@@ -97,8 +97,8 @@ async function populatePathEdges() {
         for (let i = 0; i < coords.length - 1; i++) {
             const [lngA, latA] = coords[i];
             const [lngB, latB] = coords[i + 1];
-            const segmentId = coords.length > 2 ? `${props.id}_${i+1}` : props.id;
-            const segmentName = coords.length > 2 ? `${props.name}_${i+1}` : props.id;
+            const segmentId = coords.length > 2 ? `${props.id}_${i + 1}` : props.id;
+            const segmentName = coords.length > 2 ? `${props.name}_${i + 1}` : props.id;
             batch.set(doc(db, "PathEdge", segmentId), {
                 id: segmentId,
                 type: "path",
@@ -131,7 +131,7 @@ async function publishNavigationGraph() {
     }
 }
 
-async function populateAmenity(){
+async function populateAmenity() {
     try {
         const amenitySnapshot = await getDocs(collection(db, "Amenity"));
         const deleteBatch = writeBatch(db);
@@ -144,22 +144,22 @@ async function populateAmenity(){
 
         const addBatch = writeBatch(db);
         routingFeatures.forEach((feature) => {
-        const props = feature.properties;
-        if (props.type === "poi") {
-            const id = props.id;
-            const docRef = doc(collection(db, "Amenity"), id);
-            addBatch.set(docRef, {
-                AmenityID: id,
-                Name: props.name,
-                AmenityType: "Restroom",
-                SubTypeName: props.gender,
-                Congestion: "Low",
-                WaitTime: 0.0,
-                LastUpdated: Date.now(),
-                IsAccessible: true,
-                NodeID: id,
-            });
-        }
+            const props = feature.properties;
+            if (props.type === "poi") {
+                const id = props.id;
+                const docRef = doc(collection(db, "Amenity"), id);
+                addBatch.set(docRef, {
+                    AmenityID: id,
+                    Name: props.name,
+                    AmenityType: "Restroom",
+                    SubTypeName: props.gender,
+                    Congestion: "Low",
+                    WaitTime: 0.0,
+                    LastUpdated: Date.now(),
+                    IsAccessible: true,
+                    NodeID: id,
+                });
+            }
         });
 
         await addBatch.commit();
@@ -220,25 +220,91 @@ async function populateMisc() {
     console.log("Misc collections seeded.");
 }
 
-function Populate(){
+function Populate() {
+    const buttonStyle = {
+        padding: "12px 24px",
+        fontSize: "16px",
+        fontWeight: "600",
+        border: "none",
+        borderRadius: "8px",
+        cursor: "pointer",
+        transition: "all 0.3s ease",
+        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+        color: "white",
+        minWidth: "200px",
+    };
+
+    const geoButtonStyle = {
+        ...buttonStyle,
+        backgroundColor: "#3b82f6",
+        "&:hover": { backgroundColor: "#2563eb" },
+    };
+
+    const miscButtonStyle = {
+        ...buttonStyle,
+        backgroundColor: "#8b5cf6",
+        "&:hover": { backgroundColor: "#7c3aed" },
+    };
+
+    const amenityButtonStyle = {
+        ...buttonStyle,
+        backgroundColor: "#ec4899",
+        "&:hover": { backgroundColor: "#db2777" },
+    };
+
+    const graphButtonStyle = {
+        ...buttonStyle,
+        backgroundColor: "#10b981",
+        "&:hover": { backgroundColor: "#059669" },
+    };
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={populateGeoCollection}>Populate Geo</button>
-            </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={populateMisc}>Populate Misc</button>
-            </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={populateAmenity}>Populate Amenity</button>
-            </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={publishNavigationGraph}>Publish Navigation Graph</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "20px" }}>
+            <h2 style={{ marginTop: 0, color: "#333" }}>Database Population</h2>
+            <div style={{ display: "flex", flexDirection: "column", width: "20%", gap: "12px", flexWrap: "wrap" }}>
+                <button
+                    onClick={populateGeoCollection}
+                    style={geoButtonStyle}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = "#2563eb")}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = "#3b82f6")}
+                    onMouseDown={(e) => (e.target.style.transform = "scale(0.98)")}
+                    onMouseUp={(e) => (e.target.style.transform = "scale(1)")}
+                >
+                    Populate Geo
+                </button>
+                <button
+                    onClick={populateMisc}
+                    style={miscButtonStyle}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = "#7c3aed")}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = "#8b5cf6")}
+                    onMouseDown={(e) => (e.target.style.transform = "scale(0.98)")}
+                    onMouseUp={(e) => (e.target.style.transform = "scale(1)")}
+                >
+                    Populate Misc
+                </button>
+                <button
+                    onClick={populateAmenity}
+                    style={amenityButtonStyle}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = "#db2777")}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = "#ec4899")}
+                    onMouseDown={(e) => (e.target.style.transform = "scale(0.98)")}
+                    onMouseUp={(e) => (e.target.style.transform = "scale(1)")}
+                >
+                    Populate Amenity
+                </button>
+                <button
+                    onClick={publishNavigationGraph}
+                    style={graphButtonStyle}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = "#059669")}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = "#10b981")}
+                    onMouseDown={(e) => (e.target.style.transform = "scale(0.98)")}
+                    onMouseUp={(e) => (e.target.style.transform = "scale(1)")}
+                >
+                    Publish Navigation Graph
+                </button>
             </div>
         </div>
     );
 }
-
 
 export default Populate;

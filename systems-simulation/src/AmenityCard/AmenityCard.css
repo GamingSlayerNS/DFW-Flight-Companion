@@ -1,0 +1,150 @@
+.amenity-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    background: var(--bg-alt, #1a1a1a);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 360px;
+    min-width: 260px;
+}
+
+.amenity-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.amenity-card__type {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent, #646cff);
+}
+
+.amenity-card__accessible-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    border-radius: 12px;
+    padding: 2px 8px;
+}
+
+.amenity-card__accessible-badge--yes {
+    background: #1976d2;
+}
+
+.amenity-card__accessible-badge--no {
+    background: #9e9e9e;
+}
+
+.amenity-card__name {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-h, #fff);
+    line-height: 1.3;
+}
+
+.amenity-card__subtype {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted, #888);
+    text-transform: capitalize;
+}
+
+.amenity-card__divider {
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+}
+
+.amenity-card__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.amenity-card__label {
+    color: var(--text-muted, #888);
+}
+
+.amenity-card__congestion {
+    font-weight: 600;
+}
+
+.amenity-card__congestion--low    { color: #4caf50; }
+.amenity-card__congestion--moderate { color: #ff9800; }
+.amenity-card__congestion--high   { color: #f44336; }
+.amenity-card__congestion--unknown { color: #888; }
+
+.amenity-card__status {
+    font-weight: 600;
+}
+.amenity-card__status--Open    { color: #4caf50; }
+.amenity-card__status--Closed   { color: #f44336; }
+
+
+.amenity-card__timestamp {
+    font-size: 12px;
+    color: var(--text-muted, #888);
+}
+
+.amenity-card__code {
+    font-size: 12px;
+    background: var(--social-bg, #2a2a2a);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--text-h, #fff);
+}
+
+.amenity-card__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.amenity-card__field-label {
+    font-size: 12px;
+    color: var(--text-muted, #888);
+}
+
+.amenity-card__input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--social-bg, #2a2a2a);
+    color: var(--text-h, #fff);
+    font-size: 13px;
+
+    &:focus {
+        outline: 2px solid var(--accent, #646cff);
+        outline-offset: 2px;
+    }
+}
+
+.amenity-card__update-btn {
+    margin-top: 4px;
+    padding: 7px 0;
+    width: 100%;
+    border: none;
+    border-radius: 6px;
+    background: var(--accent, #646cff);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+
+    &:hover {
+        opacity: 0.85;
+    }
+    &:active {
+        opacity: 0.7;
+    }
+}

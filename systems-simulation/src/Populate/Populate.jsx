@@ -17,7 +17,6 @@ async function wipeGeoCollections() {
     }
 }
 
-
 async function wipeMisc() {
     for (const name of MISC_COLLECTIONS) {
         const snapshot = await getDocs(collection(db, name));
@@ -40,7 +39,7 @@ async function populateBackground() {
 
         const points = geom.coordinates[0].map(([lng, lat]) => new GeoPoint(lat, lng));
 
-        batch.set(doc(db, "MapBackgroundTest", props.id), {
+        batch.set(doc(db, "MapBackground", props.id), {
             id: props.id,
             type: props.type,
             name: props.name,
@@ -67,15 +66,13 @@ async function populateNodes() {
 
         const [lng, lat] = geom.coordinates;
 
-        batch.set(doc(db, "MapNodeTest", props.id), {
-            AmenityID: props.id,
-            AmenityType: "Restroom",
-            Congestion: "Low",
-            IsAccessible: true,
-            name: props.name,
+        batch.set(doc(db, "MapNode", props.id), {
             id: props.id,
-            type: props.gender,
-            WaitTime: 0.0,
+            terminalId: "Terminal D",
+            type: "poi",
+            name: props.name,
+            level: props.level,
+            gender: props.gender ?? '',
             coordinates: [new GeoPoint(lat, lng)],
         });
         count++;
@@ -102,7 +99,7 @@ async function populatePathEdges() {
             const [lngB, latB] = coords[i + 1];
             const segmentId = coords.length > 2 ? `${props.id}_${i+1}` : props.id;
             const segmentName = coords.length > 2 ? `${props.name}_${i+1}` : props.id;
-            batch.set(doc(db, "PathEdgeTest", segmentId), {
+            batch.set(doc(db, "PathEdge", segmentId), {
                 id: segmentId,
                 type: "path",
                 name: segmentName,
@@ -118,6 +115,7 @@ async function populatePathEdges() {
 }
 
 async function populateGeoCollection() {
+    await wipeGeoCollections();
     await populateNodes();
     await populateBackground();
     await populatePathEdges();
@@ -172,6 +170,8 @@ async function populateAmenity(){
 }
 
 async function populateMisc() {
+    await wipeMisc();
+
     const batch = writeBatch(db);
 
     batch.set(doc(collection(db, "Terminal")), {
@@ -220,17 +220,14 @@ async function populateMisc() {
     console.log("Misc collections seeded.");
 }
 
-
 function Populate(){
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={wipeGeoCollections}>Wipe Geo</button>
                 <button onClick={populateGeoCollection}>Populate Geo</button>
             </div>
             <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={wipeMisc}>Wipe Misc</button>
                 <button onClick={populateMisc}>Populate Misc</button>
             </div>
             <div style={{ display: "flex", gap: "8px" }}>

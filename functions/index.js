@@ -3,10 +3,12 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
+const { getDatabase } = require("firebase-admin/database");
 
 // Initialize Admin SDK to access Firestore
 initializeApp();
 const db = getFirestore();
+const rtdb = getDatabase();
 
 setGlobalOptions({ maxInstances: 10 });
 
@@ -219,6 +221,79 @@ exports.publishNavigationGraph = onCall(async (request) => {
         const graphData = Object.values(graph);
         await db.collection("MapData").doc("currentGraph").set({
             data: graphData,
+            lastUpdated: Date.now(),
+        });
+
+        return { success: true, nodeCount: graphData.length };
+    } catch (error) {
+        logger.error("Error publishing navigation graph:", error);
+        throw new HttpsError("internal", "Failed to publish graph.");
+    }
+});
+
+/**
+ * Admin Function: Publishes the graph to the real-time database.
+ */
+exports.publishGraphToRealtime = onCall(async (request) => {
+    try {
+        logger.info("Publishing Navigation Graph...");
+        const snapshot = await db.collection("PathEdge").get();
+
+        const nodePool = [];
+        const graph = {};
+        const MERGE_THRESHOLD = 1e-5;
+
+        const getOrCreateNode = (lat, lng) => {
+            const existing = nodePool.find((n) => {
+                const dx = n.lng - lng;
+                const dy = n.lat - lat;
+                return dx * dx + dy * dy < MERGE_THRESHOLD * MERGE_THRESHOLD;
+            });
+            if (existing) return existing;
+            const newNode = { lat, lng };
+            nodePool.push(newNode);
+            return newNode;
+        };
+
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.type !== "path") return;
+            const coords = data.coordinates || [];
+            for (let i = 0; i < coords.length - 1; i++) {
+                const nodeA = getOrCreateNode(coords[i].latitude, coords[i].longitude);
+                const nodeB = getOrCreateNode(coords[i + 1].latitude, coords[i + 1].longitude);
+                const keyA = `${nodeA.lng},${nodeA.lat}`;
+                const keyB = `${nodeB.lng},${nodeB.lat}`;
+                if (!graph[keyA]) graph[keyA] = { node: nodeA, neighbors: [] };
+                if (!graph[keyB]) graph[keyB] = { node: nodeB, neighbors: [] };
+                if (!graph[keyA].neighbors.some((n) => n.lat === nodeB.lat && n.lng === nodeB.lng)) {
+                    graph[keyA].neighbors.push({ ...nodeB, congestion: 0 });
+                }
+                if (!graph[keyB].neighbors.some((n) => n.lat === nodeA.lat && n.lng === nodeA.lng)) {
+                    graph[keyB].neighbors.push({ ...nodeA, congestion: 0 });
+                }
+            }
+        });
+
+        const graphData = Object.values(graph);
+
+        // Build a keyed object for the Realtime Database
+        const rtdbPayload = {};
+        graphData.forEach((entry, index) => {
+            const nodeKey = `${entry.node.lng},${entry.node.lat}`.replace(/\./g, "_");
+            rtdbPayload[nodeKey] = {
+                node: entry.node,
+                neighbors: entry.neighbors.reduce((acc, neighbor, i) => {
+                    const neighborKey = `${neighbor.lng},${neighbor.lat}`.replace(/\./g, "_");
+                    acc[neighborKey] = neighbor;
+                    return acc;
+                }, {}),
+            };
+        });
+
+        // Push to Firebase Realtime Database
+        await rtdb.ref("MapData/currentGraph").set({
+            data: rtdbPayload,
             lastUpdated: Date.now(),
         });
 

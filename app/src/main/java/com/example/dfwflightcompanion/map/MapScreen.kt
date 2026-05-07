@@ -1,12 +1,9 @@
 package com.example.dfwflightcompanion.map
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -75,7 +72,9 @@ import com.example.dfwflightcompanion.helpers.MapBackground
 import com.example.dfwflightcompanion.helpers.MapNode
 import com.example.dfwflightcompanion.helpers.haversine
 import com.example.dfwflightcompanion.helpers.loadVectorToBitmap
+import com.example.dfwflightcompanion.navigation.Edge
 import com.example.dfwflightcompanion.navigation.GraphBuilder
+import com.example.dfwflightcompanion.navigation.NavigationGraphRepository
 import com.example.dfwflightcompanion.navigation.Node
 import com.example.dfwflightcompanion.navigation.Pathfinding
 import com.google.firebase.Firebase
@@ -109,8 +108,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.LineString
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
-
-
+import kotlinx.coroutines.launch
 
 fun formatTimeAgo(timestamp: Long): String {
     if (timestamp == 0L) return "Never"
@@ -140,10 +138,11 @@ fun MapScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var isNavigating by remember { mutableStateOf(false) }
     val mapRef = remember { mutableStateOf<MapLibreMap?>(null)}
+    val coroutineScope = rememberCoroutineScope()
 
     // User's current location (Simulation)
-    val userLocation = remember { mutableStateOf(LatLng(32.8993, -97.0446)) }
-    val initialCameraPosition = remember { LatLng(32.8974, -97.0446) }
+    val userLocation = mapViewModel.userLocation
+    val initialCameraPosition = remember { LatLng(32.897546, -97.044471) }
     var currentDestination by remember {
         mutableStateOf<Pair<Double, Double>?>(null)
     }
@@ -196,24 +195,24 @@ fun MapScreen(
     var currentNavDistanceToTurn by remember { mutableStateOf("") }
     var navPath by remember { mutableStateOf<List<Node>>(emptyList()) }
 
-    var graph by remember { mutableStateOf<Map<Node, List<Node>>>(emptyMap()) }
+    var graph by remember { mutableStateOf<Map<Node, List<Edge>>>(emptyMap()) }
 
     LaunchedEffect(Unit) {
-        val functions = Firebase.functions
-        // ONLY if testing locally:
-        functions.useEmulator("10.0.2.2", 5001)
-        
-        functions.getHttpsCallable("getNavigationGraph").call()
-            .addOnSuccessListener { result ->
-                @Suppress("UNCHECKED_CAST")
-                val data = result.getData() as? List<Map<String, Any>>
-                if (data != null) {
-                    graph = GraphBuilder.fromFirebase(data)
-                }
-            }
-            .addOnFailureListener { e ->
-                Log.e("Navigation", "Failed to fetch graph", e)
-            }
+        NavigationGraphRepository.startListening()
+    }
+
+    val navigationGraph by NavigationGraphRepository.navigationGraph.collectAsState()
+
+    LaunchedEffect(navigationGraph) {
+        navigationGraph?.let {
+            graph = GraphBuilder.fromNavigationGraph(it)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            NavigationGraphRepository.stopListening()
+        }
     }
 
     remember {
@@ -225,16 +224,15 @@ fun MapScreen(
             onCreate(null)
             getMapAsync { map ->
                 mapRef.value = map
-                map.uiSettings.isCompassEnabled = false
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
-                    setupSourcesAndLayers(context, style, userLocation.value)
+                    setupSourcesAndLayers(context, style, userLocation)
                     fetchDataFromFunctions(style, amenities, mapNodes, mapViewModel)
                     
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
                             CameraPosition.Builder()
                                 .target(initialCameraPosition)
-                                .zoom(16.0)
+                                .zoom(17.5)
                                 .build()
                         )
                     )
@@ -306,8 +304,8 @@ fun MapScreen(
 
     // Re-compute the navigation path to display updated navigation instructions when user goes off-route
     fun reroute(destLng: Double, destLat: Double) {
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
         val newPath = computeRoute(userLng, userLat, destLng, destLat)
 
         if (newPath.isNullOrEmpty() || newPath.size < 2) {
@@ -339,8 +337,8 @@ fun MapScreen(
         val currPath = navPath
         if (currPath.isEmpty()) return
 
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
 
         val userNode = Node(userLng, userLat)
         val segmentIndex = findClosestSegmentIndex(userNode, currPath)
@@ -372,8 +370,8 @@ fun MapScreen(
 
     // calculates the distance of the computed route from user to a selected amenity
     fun distanceToUser(amenity: AmenityDetail): Double {
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
         val selectedRR = mapNodes.find { it.id == amenity.nodeId } ?: return Double.POSITIVE_INFINITY
         val route = computeRoute(userLng, userLat,selectedRR.longitude,selectedRR.latitude) ?: return Double.POSITIVE_INFINITY
 
@@ -483,8 +481,8 @@ fun MapScreen(
         val routeSource = style.getSourceAs<GeoJsonSource>("route-source")
 
         // Retrieving user's location
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
 
         // Calculate the route path
         val path = computeRoute(userLng, userLat, destLng, destLat) ?: return@startNav
@@ -521,7 +519,7 @@ fun MapScreen(
         map.animateCamera(
             CameraUpdateFactory.newCameraPosition(
                 CameraPosition.Builder()
-                    .target(userLocation.value)
+                    .target(userLocation)
                     .zoom(18.0)
                     .bearing(map.cameraPosition.bearing) // Face direction of the user
                     .tilt(45.0)
@@ -531,29 +529,68 @@ fun MapScreen(
     }
 
     var showAmenityBox by remember { mutableStateOf(false) } // box for viewing amenity details
+    var offsetY by remember { mutableStateOf(0f) }
+    val closeThreshold = with(LocalDensity.current) { 120.dp.toPx() }
 
     // alert box for updating crowd level
     var showCrowdLvlBox by remember { mutableStateOf(false) }
     if (showCrowdLvlBox) {
-        CrowdLevelDialog(
-            selectedAmenity = selectedAmenity,
-            onDismiss = { showCrowdLvlBox = false },
-            onCongestionUpdated = { amenity, level ->
-                val functions = Firebase.functions
-                val data = hashMapOf("amenityId" to amenity.id, "congestion" to level)
-                functions.getHttpsCallable("updateAmenityCongestion").call(data)
-                    .addOnSuccessListener {
-                        Log.d("FirestoreDB", "Amenity congestion updated successfully to $level")
-                        val index = amenities.indexOfFirst { it.id == amenity.id }
-                        if (index != -1) {
-                            val updated = amenities[index].copy(congestion = level, lastUpdated = System.currentTimeMillis())
-                            amenities[index] = updated
-                            selectedAmenity = updated
-                        }
+        AlertDialog(
+            onDismissRequest = { showCrowdLvlBox = false },
+            title = {
+                Text(
+                    "Current Crowd Level",
+                    modifier = Modifier.padding(top = 12.dp, start = 10.dp)
+                )
+            },
+            text = {
+                Column {
+                    listOf("Low", "Medium", "High").forEach { level ->
+                        Text(
+                            text = level,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedAmenity?.let { amenity ->
+                                        val functions = Firebase.functions
+                                        val data = hashMapOf(
+                                            "amenityId" to amenity.id,
+                                            "congestion" to level
+                                        )
+                                        functions.getHttpsCallable("updateAmenityCongestion").call(data)
+                                            .addOnSuccessListener {
+                                                Log.d("FirestoreDB", "Amenity congestion updated successfully to $level")
+                                                // Update local state
+                                                val index = amenities.indexOfFirst { it.id == amenity.id }
+                                                if (index != -1) {
+                                                    val updated = amenities[index].copy(
+                                                        congestion = level,
+                                                        lastUpdated = System.currentTimeMillis()
+                                                    )
+                                                    amenities[index] = updated
+                                                    selectedAmenity = updated
+                                                }
+                                            }
+                                            .addOnFailureListener { e ->
+                                                Log.e("FirestoreDB", "Error updating amenity congestion", e)
+                                            }
+                                    }
+                                    showCrowdLvlBox = false
+                                }
+                                .padding(12.dp)
+                        )
                     }
-                    .addOnFailureListener { e ->
-                        Log.e("FirestoreDB", "Error updating amenity congestion", e)
+                }
+            },
+            confirmButton = {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TextButton(onClick = { showCrowdLvlBox = false }) {
+                        Text("Cancel")
                     }
+                }
             }
         )
     }
@@ -632,8 +669,8 @@ fun MapScreen(
         val routeSource = style.getSourceAs<GeoJsonSource>("route-source") ?: return
 
         // Retrieving user's location
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
 
         // Calculate the route path
         val path = computeRoute(userLng, userLat, destLng, destLat) ?: return
@@ -690,7 +727,7 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(userLocation.value, currentDestination) {
+    LaunchedEffect(userLocation, currentDestination) {
         if(isNavigating) {
             val destination = currentDestination ?: return@LaunchedEffect
 
@@ -823,8 +860,8 @@ fun MapScreen(
     fun moveUser(direction: Direction) {
         val step = 0.00005  // adjust for speed
 
-        val currentLng = userLocation.value.longitude
-        val currentLat = userLocation.value.latitude
+        val currentLng = userLocation.longitude
+        val currentLat = userLocation.latitude
 
         val (newLng, newLat) = when (direction) {
             Direction.UP -> currentLng to (currentLat + step)
@@ -834,17 +871,49 @@ fun MapScreen(
         }
 
         // update your state
-        userLocation.value = LatLng(newLat, newLng)
+        mapViewModel.updateLocation(LatLng(newLat, newLng))
 
         // update map + camera
         updateUserLocation(newLng, newLat)
     }
 
-    val filterButtonTopPadding by animateDpAsState(
-        targetValue = if (cameraBearing in 0.0000000001..359.9999999999) 56.dp else 8.dp,
-        label = "filterButtonTop"
-    )
-    val filterButtonPadding = Modifier.padding(top = filterButtonTopPadding, end = 6.dp)
+    fun moveUserToNextNode(){
+        if (turnSegments.isEmpty() || currentStepIndex >= turnSegments.size) return
+        val nextTurnSegment = turnSegments[currentStepIndex]
+        val turnNode = navPath.getOrNull(nextTurnSegment) ?: return
+
+        val startLat = userLocation.latitude
+        val startLng = userLocation.longitude
+        val targetLat = turnNode.lat   // .toDouble() if it's a String
+        val targetLng = turnNode.lng  // .toDouble() if it's a String
+
+        val deltaLat = targetLat - startLat
+        val deltaLng = targetLng - startLng
+
+        // Constant speed: same per-frame step you had before
+        val stepDeg = 0.000005
+        val frameMs = 16L  // ~60fps
+        val distance = sqrt(deltaLat * deltaLat + deltaLng * deltaLng)
+        val totalSteps = (distance / stepDeg).toInt().coerceAtLeast(1)
+
+        coroutineScope.launch {
+            for (i in 1..totalSteps) {
+                val t = i.toDouble() / totalSteps   // 0.0 -> 1.0
+                val newLat = startLat + deltaLat * t
+                val newLng = startLng + deltaLng * t
+
+                mapViewModel.updateLocation(LatLng(newLat, newLng))
+                updateUserLocation(newLng, newLat)
+                delay(frameMs)
+            }
+        }
+    }
+
+    val filterButtonPadding = if (cameraBearing in 0.0000000001..359.9999999999) {
+        Modifier.padding(top = 56.dp, end = 6.dp)   // facing off-north
+    } else {
+        Modifier.padding(top = 8.dp, end = 6.dp)    // default (facing north)
+    }
 
     // dismiss the error message displayed on screen when no results are found using custom filters
     LaunchedEffect(noFilteringResultsFound) {
@@ -893,63 +962,510 @@ fun MapScreen(
             val selectedBackground = remember(selectedDest, mapBackgrounds) {
                 findBackgroundForSelectedDest(selectedDest, mapBackgrounds)
             }
-            AmenityDetailBox(
-                selectedAmenity = selectedAmenity,
-                selectedBackground = selectedBackground,
-                isNavigating = isNavigating,
-                mapRef = mapRef,
-                userLocation = userLocation,
-                initialCameraPosition = initialCameraPosition,
-                selectedDest = selectedDest,
-                onClose = { showAmenityBox = false },
-                onShowCrowdLevelDialog = { showCrowdLvlBox = true },
-                onStartNavigation = { lng, lat ->
-                    showAmenityBox = false
-                    startNavigation(lng, lat)
-                    currentDestination = Pair(lng, lat)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(0, offsetY.roundToInt()) }
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 32.dp,
+                                topEnd = 32.dp
+                            )
+                        )
+                        .align(Alignment.BottomCenter)
+                        .background(androidx.compose.ui.graphics.Color(0xFFF5F5F5))
+                        .draggable(
+                            orientation = Orientation.Vertical,
+                            state = rememberDraggableState { delta ->
+                                offsetY = (offsetY + delta).coerceAtLeast(0f)
+                            },
+                            onDragStopped = {
+                                if (offsetY > closeThreshold) {
+                                    showAmenityBox = false   // closes the box
+                                }
+                                offsetY = 0f
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(6.dp)
+                            .align(Alignment.TopCenter),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(60.dp)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(androidx.compose.ui.graphics.Color.LightGray)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(24.dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(androidx.compose.ui.graphics.Color.Gray)
+                            .clickable {
+                                showAmenityBox = false
+                                if (isNavigating) {
+                                    mapRef.value?.animateCamera(
+                                        CameraUpdateFactory.newCameraPosition(
+                                            CameraPosition.Builder()
+                                                .target(userLocation)
+                                                .zoom(18.0)
+                                                .bearing(mapRef.value?.cameraPosition?.bearing ?: 0.0)
+                                                .tilt(45.0)
+                                                .build()
+                                        ),2000
+                                    )
+                                } else {
+                                    mapRef.value?.animateCamera(
+                                        CameraUpdateFactory.newCameraPosition(
+                                            CameraPosition.Builder()
+                                                .target(initialCameraPosition)
+                                                .zoom(16.0)
+                                                .bearing(0.0)
+                                                .tilt(0.0)
+                                                .build()
+                                        ), 2000
+                                    )
+                                }
+                            },
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "✕",
+                            color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
+                            fontSize = 24.sp
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 40.dp, start = 36.dp),
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.Top
+                    ) {
+                        Text(
+                            text = selectedAmenity?.name ?: selectedBackground?.name ?: "Unknown",
+                            color = androidx.compose.ui.graphics.Color.Black,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.SansSerif
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "Occupancy Status",
+                                color = androidx.compose.ui.graphics.Color.Black,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                            Text(
+                                text = if (selectedAmenity?.isAccessible == true) "OPEN" else "CLOSED",
+                                color = if (selectedAmenity?.isAccessible == true) androidx.compose.ui.graphics.Color(0xFF00C853) else androidx.compose.ui.graphics.Color(0xFFE74C3C),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "Crowd Level",
+                                color = androidx.compose.ui.graphics.Color.Black,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                modifier = Modifier.alignBy(FirstBaseline)
+                            )
+                            Text(
+                                text = selectedAmenity?.congestion ?: "Low",
+                                color = androidx.compose.ui.graphics.Color(0xFF00C853),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                modifier = Modifier.alignBy(FirstBaseline)
+                            )
+                            Text(
+                                text = "Last Updated",
+                                color = androidx.compose.ui.graphics.Color.Gray,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                modifier = Modifier
+                                    .alignBy(FirstBaseline)
+                                    .padding(start = 6.dp)
+                            )
+                            Text(
+                                text = selectedAmenity?.let { formatTimeAgo(it.lastUpdated) } ?: "1min Ago",
+                                color = androidx.compose.ui.graphics.Color(0xFF00C853),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                modifier = Modifier.alignBy(FirstBaseline)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Button(
+                                onClick = {
+                                    showCrowdLvlBox = true
+                                }
+                            ) {
+                                Text("Update Crowd Level")
+                            }
+
+                            Button(
+                                onClick = {
+                                    showAmenityBox = false
+                                    selectedDest?.let { (lng, lat) ->
+                                        startNavigation(lng, lat)
+                                    }
+                                    currentDestination = selectedDest
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Navigation,
+                                    contentDescription = "Start Navigation",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Start Navigation")
+                            }
+                        }
+                    }
                 }
-            )
+            }
         }
 
         // AlertDialog with Checkboxes
         if (showFilterDialog) {
-            FilterDialog(
-                wheelchairFilter = wheelchairFilter,
-                mensFilter = mensFilter,
-                womensFilter = womensFilter,
-                amenityStatusFilter = amenityStatusFilter,
-                lowCrowdLvlFilter = lowCrowdLvlFilter,
-                mediumCrowdLvlFilter = mediumCrowdLvlFilter,
-                highCrowdLvlFilter = highCrowdLvlFilter,
-                nearestAvailableFilter = nearestAvailableFilter,
-                noFilteringResultsFound = noFilteringResultsFound,
-                onApply = { w, m, wo, s, l, me, h, n ->
-                    applyCustomFilters(w, m, wo, s, l, me, h, n)
-                    if (!noFilteringResultsFound) {
-                        showAmenityBox = false
-                        showFilterDialog = false
-                        wheelchairFilter = w
-                        mensFilter = m
-                        womensFilter = wo
-                        amenityStatusFilter = s
-                        lowCrowdLvlFilter = l
-                        mediumCrowdLvlFilter = me
-                        highCrowdLvlFilter = h
-                        nearestAvailableFilter = n
-                        mapRef.value?.animateCamera(
-                            CameraUpdateFactory.newCameraPosition(
-                                CameraPosition.Builder()
-                                    .target(initialCameraPosition)
-                                    .zoom(16.0)
-                                    .bearing(0.0)
-                                    .tilt(0.0)
-                                    .build()
-                            ), 2000
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(androidx.compose.ui.graphics.Color.White)
+                    .zIndex(10f) // ensure it sits above the map
+                    .padding(24.dp)
+            ) {
+                var tempWheelchair by remember { mutableStateOf(wheelchairFilter) }
+                var tempMens by remember { mutableStateOf(mensFilter) }
+                var tempWomens by remember { mutableStateOf(womensFilter) }
+                var tempStatus by remember { mutableStateOf(amenityStatusFilter) }
+                var tempLowLvl by remember { mutableStateOf(lowCrowdLvlFilter) }
+                var tempMediumLvl by remember { mutableStateOf(mediumCrowdLvlFilter) }
+                var tempHighLvl by remember { mutableStateOf(highCrowdLvlFilter) }
+                var tempNearestAvailable by remember { mutableStateOf(nearestAvailableFilter) }
+
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clickable { showFilterDialog = false }
+                        )
+
+                        Text(
+                            "Custom Filters",
+                            modifier = Modifier.padding(end = 70.dp),
+                            fontFamily = FontFamily(Font(R.font.barlowcondensed_semibold, FontWeight.SemiBold)),
+                            fontSize = 30.sp
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .background(androidx.compose.ui.graphics.Color.Black, shape = RoundedCornerShape(8.dp))
+                                .clickable {
+                                    // Reset all filters
+                                    tempWheelchair = false
+                                    tempMens = false
+                                    tempWomens = false
+                                    tempStatus = null
+                                    tempLowLvl = false
+                                    tempMediumLvl = false
+                                    tempHighLvl = false
+                                    tempNearestAvailable = false
+                                }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "Reset",
+                                color = androidx.compose.ui.graphics.Color.White,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        thickness = 1.dp,
+                        color = androidx.compose.ui.graphics.Color.LightGray
+                    )
+
+                    // Checkboxes/Filter Options
+                    Text(
+                        text = "Restroom Types",
+                        fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)),
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempWheelchair = !tempWheelchair }
+                    ) {
+                        Checkbox(
+                            checked = tempWheelchair,
+                            onCheckedChange = { tempWheelchair = it }
+                        )
+                        Text("Wheelchair Accessible")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempMens = !tempMens }
+                    ) {
+                        Checkbox(
+                            checked = tempMens,
+                            onCheckedChange = { tempMens = it }
+                        )
+                        Text("Men's Restrooms")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempWomens = !tempWomens }
+                    ) {
+                        Checkbox(
+                            checked = tempWomens,
+                            onCheckedChange = { tempWomens = it }
+                        )
+                        Text("Women's Restrooms")
+                    }
+                    Text(
+                        text = "Restroom Status",
+                        fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)),
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!tempNearestAvailable) {
+                                    tempStatus = if (tempStatus == "open") null else "open"
+                                }
+                            }
+                    ) {
+                        RadioButton(
+                            selected = tempStatus == "open",
+                            onClick = {
+                                if (!tempNearestAvailable) {
+                                    tempStatus = if (tempStatus == "open") null else "open"
+                                }
+                            }
+                        )
+                        Text("Open")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!tempNearestAvailable) {
+                                    tempStatus = if (tempStatus == "closed") null else "closed"
+                                }
+                            }
+                    ) {
+                        RadioButton(
+                            selected = tempStatus == "closed",
+                            onClick = {
+                                if (!tempNearestAvailable) {
+                                    tempStatus = if (tempStatus == "closed") null else "closed"
+                                }
+                            }
+                        )
+                        Text("Closed")
+                    }
+                    Text(
+                        text = "Proximity",
+                        fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)),
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                tempNearestAvailable = !tempNearestAvailable
+                                if (tempNearestAvailable) tempStatus = "open" else tempStatus = null
+                            }
+                    ) {
+                        Checkbox(
+                            checked = tempNearestAvailable,
+                            onCheckedChange = { checked ->
+                                tempNearestAvailable = checked
+                                if (checked) tempStatus = "open" else tempStatus = null
+                            }
+                        )
+                        Text("Nearest Available Option")
+                    }
+                    Text(
+                        text = "Crowd Level",
+                        fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)),
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempLowLvl = !tempLowLvl }
+                    ) {
+                        Checkbox(
+                            checked = tempLowLvl,
+                            onCheckedChange = { tempLowLvl = it }
+                        )
+                        Text("Low")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempMediumLvl = !tempMediumLvl }
+                    ) {
+                        Checkbox(
+                            checked = tempMediumLvl,
+                            onCheckedChange = { tempMediumLvl = it }
+                        )
+                        Text("Medium")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { tempHighLvl = !tempHighLvl }
+                    ) {
+                        Checkbox(
+                            checked = tempHighLvl,
+                            onCheckedChange = { tempHighLvl = it }
+                        )
+                        Text("High")
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    // Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(androidx.compose.ui.graphics.Color.Black, shape = RoundedCornerShape(10.dp))
+                                .clickable {
+                                    applyCustomFilters(tempWheelchair, tempMens, tempWomens, tempStatus, tempLowLvl, tempMediumLvl, tempHighLvl, tempNearestAvailable)
+                                    if (!noFilteringResultsFound) {
+                                        showAmenityBox = false
+                                        showFilterDialog = false
+
+                                        wheelchairFilter = tempWheelchair
+                                        mensFilter = tempMens
+                                        womensFilter = tempWomens
+                                        amenityStatusFilter = tempStatus
+                                        lowCrowdLvlFilter = tempLowLvl
+                                        mediumCrowdLvlFilter = tempMediumLvl
+                                        highCrowdLvlFilter = tempHighLvl
+                                        nearestAvailableFilter = tempNearestAvailable
+
+                                        mapRef.value?.animateCamera(
+                                            CameraUpdateFactory.newCameraPosition(
+                                                CameraPosition.Builder()
+                                                    .target(initialCameraPosition)
+                                                    .zoom(16.0)
+                                                    .bearing(0.0)
+                                                    .tilt(0.0)
+                                                    .build()
+                                            ), 2000
+                                        )
+                                    }
+                                }
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Apply Filters",
+                                color = androidx.compose.ui.graphics.Color.White,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+
+                // Error message overlay with fade animation when no results found using custom filters
+                AnimatedVisibility(
+                    visible = noFilteringResultsFound,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(top = 16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .background(androidx.compose.ui.graphics.Color.Red, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "No results were found.",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 22.sp
                         )
                     }
-                },
-                onDismiss = { showFilterDialog = false }
-            )
+                }
+            }
         }
 
         // Stop Navigation Button
@@ -972,73 +1488,109 @@ fun MapScreen(
                 }
             }
             if (currentNavInstruction.isNotEmpty() && !showAmenityBox) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth(0.95f)
-                        .padding(bottom = 12.dp)
-                        .align(Alignment.BottomCenter)
-                        .padding(top = 32.dp)
-                        .background(androidx.compose.ui.graphics.Color(0xFF00008B).copy(alpha = 0.9f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Column {
-                            val iconRes = when {
-                                currentNavInstruction.contains("right", ignoreCase = true) ->
-                                    R.drawable.right_turn_arrow
-                                currentNavInstruction.contains("left", ignoreCase = true) ->
-                                    R.drawable.left_turn_arrow
-                                else ->
-                                    R.drawable.arrived_icon
+                            .align(Alignment.End)
+                            .padding(end = 12.dp, bottom = 8.dp)
+                            .background(
+                                androidx.compose.ui.graphics.Color(0xFF61A2FF),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable {moveUserToNextNode()}
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = "Move to Next Position",
+                            color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.95f)
+                            .padding(bottom = 12.dp)
+                            .background(
+                                androidx.compose.ui.graphics.Color(0xFF00008B).copy(alpha = 0.9f),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                val iconRes = when {
+                                    currentNavInstruction.contains("right", ignoreCase = true) ->
+                                        R.drawable.right_turn_arrow
+
+                                    currentNavInstruction.contains("left", ignoreCase = true) ->
+                                        R.drawable.left_turn_arrow
+
+                                    else ->
+                                        R.drawable.arrived_icon
+                                }
+
+                                Image(
+                                    painter = painterResource(id = iconRes),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp)
+                                )
+
+                                Text(
+                                    text = currentNavDistanceToTurn,
+                                    color = androidx.compose.ui.graphics.Color.White,
+                                    fontSize = 24.sp
+                                )
                             }
 
-                            Image(
-                                painter = painterResource(id = iconRes),
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp)
-                            )
+                            Spacer(modifier = Modifier.width(20.dp))
 
                             Text(
-                                text = currentNavDistanceToTurn,
+                                text = currentNavInstruction,
                                 color = androidx.compose.ui.graphics.Color.White,
-                                fontSize = 24.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(20.dp))
-
-                        Text(
-                            text = currentNavInstruction,
-                            color = androidx.compose.ui.graphics.Color.White,
-                            fontSize = 32.sp,
-                            modifier = Modifier.weight(1f),
-                            style = TextStyle(
-                                lineHeight = 32.sp // increase this for more spacing
-                            )
-                        )
-
-                        Column(
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(end = 6.dp)
-                                    .background(androidx.compose.ui.graphics.Color(0xffdd0d3c), RoundedCornerShape(12.dp))
-                                    .clickable { cancelNavigation() }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "End",
-                                    color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold
+                                fontSize = 32.sp,
+                                modifier = Modifier.weight(1f),
+                                style = TextStyle(
+                                    lineHeight = 32.sp // increase this for more spacing
                                 )
+                            )
+
+                            Column(
+                                horizontalAlignment = Alignment.End
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(end = 6.dp)
+                                        .background(
+                                            androidx.compose.ui.graphics.Color(0xffdd0d3c),
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .clickable { cancelNavigation() }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "End",
+                                        color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
@@ -1100,8 +1652,8 @@ fun MapScreen(
                                                 CameraPosition.Builder()
                                                     .target(
                                                         LatLng(
-                                                            userLocation.value.latitude,
-                                                            userLocation.value.longitude
+                                                            userLocation.latitude,
+                                                            userLocation.longitude
                                                         )
                                                     )
                                                     .zoom(18.0)
@@ -1165,256 +1717,6 @@ fun MapScreen(
     }
 }
 
-@Composable
-private fun CrowdLevelDialog(
-    selectedAmenity: AmenityDetail?,
-    onDismiss: () -> Unit,
-    onCongestionUpdated: (AmenityDetail, String) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Current Crowd Level", modifier = Modifier.padding(top = 12.dp, start = 10.dp)) },
-        text = {
-            Column {
-                listOf("Low", "Medium", "High").forEach { level ->
-                    Text(
-                        text = level,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                selectedAmenity?.let { onCongestionUpdated(it, level) }
-                                onDismiss()
-                            }
-                            .padding(12.dp)
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        }
-    )
-}
-
-@Composable
-private fun AmenityDetailBox(
-    selectedAmenity: AmenityDetail?,
-    selectedBackground: MapBackground?,
-    isNavigating: Boolean,
-    mapRef: androidx.compose.runtime.MutableState<MapLibreMap?>,
-    userLocation: androidx.compose.runtime.MutableState<LatLng>,
-    initialCameraPosition: LatLng,
-    selectedDest: Pair<Double, Double>?,
-    onClose: () -> Unit,
-    onShowCrowdLevelDialog: () -> Unit,
-    onStartNavigation: (Double, Double) -> Unit
-) {
-    var offsetY by remember { mutableStateOf(0f) }
-    val closeThreshold = with(LocalDensity.current) { 120.dp.toPx() }
-
-    Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
-        Box(
-            modifier = Modifier
-                .offset { IntOffset(0, offsetY.roundToInt()) }
-                .fillMaxWidth()
-                .height(250.dp)
-                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-                .align(Alignment.BottomCenter)
-                .background(androidx.compose.ui.graphics.Color(0xFFF5F5F5))
-                .draggable(
-                    orientation = Orientation.Vertical,
-                    state = rememberDraggableState { delta -> offsetY = (offsetY + delta).coerceAtLeast(0f) },
-                    onDragStopped = {
-                        if (offsetY > closeThreshold) onClose()
-                        offsetY = 0f
-                    }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(6.dp).align(Alignment.TopCenter),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Box(modifier = Modifier.width(60.dp).height(3.dp).clip(RoundedCornerShape(50)).background(androidx.compose.ui.graphics.Color.LightGray))
-            }
-
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(24.dp)
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(androidx.compose.ui.graphics.Color.Gray)
-                    .clickable {
-                        onClose()
-                        if (isNavigating) {
-                            mapRef.value?.animateCamera(
-                                CameraUpdateFactory.newCameraPosition(
-                                    CameraPosition.Builder()
-                                        .target(userLocation.value)
-                                        .zoom(18.0)
-                                        .bearing(mapRef.value?.cameraPosition?.bearing ?: 0.0)
-                                        .tilt(45.0)
-                                        .build()
-                                ), 2000
-                            )
-                        } else {
-                            mapRef.value?.animateCamera(
-                                CameraUpdateFactory.newCameraPosition(
-                                    CameraPosition.Builder()
-                                        .target(initialCameraPosition)
-                                        .zoom(16.0)
-                                        .bearing(0.0)
-                                        .tilt(0.0)
-                                        .build()
-                                ), 2000
-                            )
-                        }
-                    },
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(text = "✕", color = androidx.compose.ui.graphics.Color(0xFFF5F5F5), fontSize = 24.sp)
-            }
-
-            Column(
-                modifier = Modifier.fillMaxSize().padding(top = 40.dp, start = 36.dp),
-                horizontalAlignment = Alignment.Start,
-                verticalArrangement = Arrangement.Top
-            ) {
-                Text(
-                    text = selectedAmenity?.name ?: selectedBackground?.name ?: "Unknown",
-                    color = androidx.compose.ui.graphics.Color.Black,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = FontFamily.SansSerif
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Occupancy Status", color = androidx.compose.ui.graphics.Color.Black, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif)
-                    Text(
-                        text = if (selectedAmenity?.isAccessible == true) "OPEN" else "CLOSED",
-                        color = if (selectedAmenity?.isAccessible == true) androidx.compose.ui.graphics.Color(0xFF00C853) else androidx.compose.ui.graphics.Color(0xFFE74C3C),
-                        fontSize = 16.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif
-                    )
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Crowd Level", color = androidx.compose.ui.graphics.Color.Black, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif, modifier = Modifier.alignBy(FirstBaseline))
-                    Text(selectedAmenity?.congestion ?: "Low", color = androidx.compose.ui.graphics.Color(0xFF00C853), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif, modifier = Modifier.alignBy(FirstBaseline))
-                    Text("Last Updated", color = androidx.compose.ui.graphics.Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif, modifier = Modifier.alignBy(FirstBaseline).padding(start = 6.dp))
-                    Text(selectedAmenity?.let { formatTimeAgo(it.lastUpdated) } ?: "1min Ago", color = androidx.compose.ui.graphics.Color(0xFF00C853), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif, modifier = Modifier.alignBy(FirstBaseline))
-                }
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Button(onClick = onShowCrowdLevelDialog) { Text("Update Crowd Level") }
-                    Button(onClick = {
-                        selectedDest?.let { (lng, lat) -> onStartNavigation(lng, lat) }
-                    }) {
-                        Icon(imageVector = Icons.Filled.Navigation, contentDescription = "Start Navigation", modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Start Navigation")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FilterDialog(
-    wheelchairFilter: Boolean,
-    mensFilter: Boolean,
-    womensFilter: Boolean,
-    amenityStatusFilter: String?,
-    lowCrowdLvlFilter: Boolean,
-    mediumCrowdLvlFilter: Boolean,
-    highCrowdLvlFilter: Boolean,
-    nearestAvailableFilter: Boolean,
-    noFilteringResultsFound: Boolean,
-    onApply: (Boolean, Boolean, Boolean, String?, Boolean, Boolean, Boolean, Boolean) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var tempWheelchair by remember { mutableStateOf(wheelchairFilter) }
-    var tempMens by remember { mutableStateOf(mensFilter) }
-    var tempWomens by remember { mutableStateOf(womensFilter) }
-    var tempStatus by remember { mutableStateOf(amenityStatusFilter) }
-    var tempLowLvl by remember { mutableStateOf(lowCrowdLvlFilter) }
-    var tempMediumLvl by remember { mutableStateOf(mediumCrowdLvlFilter) }
-    var tempHighLvl by remember { mutableStateOf(highCrowdLvlFilter) }
-    var tempNearestAvailable by remember { mutableStateOf(nearestAvailableFilter) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(androidx.compose.ui.graphics.Color.White)
-            .zIndex(10f)
-            .padding(24.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Icon(imageVector = Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(30.dp).clickable { onDismiss() })
-                Text("Custom Filters", modifier = Modifier.padding(end = 70.dp), fontFamily = FontFamily(Font(R.font.barlowcondensed_semibold, FontWeight.SemiBold)), fontSize = 30.sp)
-                Box(
-                    modifier = Modifier
-                        .background(androidx.compose.ui.graphics.Color.Black, shape = RoundedCornerShape(8.dp))
-                        .clickable { tempWheelchair = false; tempMens = false; tempWomens = false; tempStatus = null; tempLowLvl = false; tempMediumLvl = false; tempHighLvl = false; tempNearestAvailable = false }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) { Text("Reset", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.bodyMedium) }
-            }
-            HorizontalDivider(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), thickness = 1.dp, color = androidx.compose.ui.graphics.Color.LightGray)
-            Text("Restroom Types", fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)), fontSize = 20.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { tempWheelchair = !tempWheelchair }) {
-                Checkbox(checked = tempWheelchair, onCheckedChange = { tempWheelchair = it }); Text("Wheelchair Accessible")
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { tempMens = !tempMens }) {
-                Checkbox(checked = tempMens, onCheckedChange = { tempMens = it }); Text("Men's Restrooms")
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { tempWomens = !tempWomens }) {
-                Checkbox(checked = tempWomens, onCheckedChange = { tempWomens = it }); Text("Women's Restrooms")
-            }
-            Text("Restroom Status", fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)), fontSize = 20.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { if (!tempNearestAvailable) tempStatus = if (tempStatus == "open") null else "open" }) {
-                RadioButton(selected = tempStatus == "open", onClick = { if (!tempNearestAvailable) tempStatus = if (tempStatus == "open") null else "open" }); Text("Open")
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { if (!tempNearestAvailable) tempStatus = if (tempStatus == "closed") null else "closed" }) {
-                RadioButton(selected = tempStatus == "closed", onClick = { if (!tempNearestAvailable) tempStatus = if (tempStatus == "closed") null else "closed" }); Text("Closed")
-            }
-            Text("Proximity", fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)), fontSize = 20.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { tempNearestAvailable = !tempNearestAvailable; if (tempNearestAvailable) tempStatus = "open" else tempStatus = null }) {
-                Checkbox(checked = tempNearestAvailable, onCheckedChange = { checked -> tempNearestAvailable = checked; if (checked) tempStatus = "open" else tempStatus = null }); Text("Nearest Available Option")
-            }
-            Text("Crowd Level", fontFamily = FontFamily(Font(R.font.barlowcondensed_medium, FontWeight.Medium)), fontSize = 20.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { tempLowLvl = !tempLowLvl }) {
-                Checkbox(checked = tempLowLvl, onCheckedChange = { tempLowLvl = it }); Text("Low")
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { tempMediumLvl = !tempMediumLvl }) {
-                Checkbox(checked = tempMediumLvl, onCheckedChange = { tempMediumLvl = it }); Text("Medium")
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { tempHighLvl = !tempHighLvl }) {
-                Checkbox(checked = tempHighLvl, onCheckedChange = { tempHighLvl = it }); Text("High")
-            }
-            Spacer(Modifier.weight(1f))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(androidx.compose.ui.graphics.Color.Black, shape = RoundedCornerShape(10.dp))
-                        .clickable { onApply(tempWheelchair, tempMens, tempWomens, tempStatus, tempLowLvl, tempMediumLvl, tempHighLvl, tempNearestAvailable) }
-                        .padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) { Text("Apply Filters", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.bodyLarge) }
-            }
-        }
-        AnimatedVisibility(visible = noFilteringResultsFound, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.Center).padding(top = 16.dp)) {
-            Box(modifier = Modifier.background(androidx.compose.ui.graphics.Color.Red, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Text("No results were found.", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.bodyMedium, fontSize = 22.sp)
-            }
-        }
-    }
-}
-
 private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLng) {
     Log.d("FirestoreDB", "MapScreen Initializing Map Generation")
 
@@ -1469,7 +1771,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     val womensIcon = loadVectorToBitmap(context, R.drawable.womens, 60, 60)
     val neutralIcon = loadVectorToBitmap(context, R.drawable.neutral, 60, 60)
 
-// Register with the Style
+    // Register with the Style
     style.addImage("icon-male", mensIcon)
     style.addImage("icon-female", womensIcon)
     style.addImage("icon-neutral", neutralIcon)
@@ -1513,7 +1815,7 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
         SymbolLayer("amenity-layer", "amenity-source").withProperties(
             iconImage(
                 match(
-                    get("gender"),
+                    get("subType"),
                     literal("icon-neutral"), // Default value
                     stop("male", "icon-male"),
                     stop("female", "icon-female"),
@@ -1661,7 +1963,7 @@ private fun findClosestSegmentIndex(user: Node, path: List<Node>): Int {
         val dy = projected.lat - user.lat
         val dist = dx*dx + dy*dy
 
-        if (dist < bestDist) {
+        if (dist <= bestDist) {
             bestDist = dist
             bestIndex = i
         }
@@ -1801,10 +2103,6 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
                     )
                 )
             }
-            // only store the first 7 restrooms from DB
-            /* if (amenities.size > 7) {
-                amenities.subList(7, amenities.size).clear()
-            } */
             mapViewModel.storeAmenities(amenities)
         }
 }

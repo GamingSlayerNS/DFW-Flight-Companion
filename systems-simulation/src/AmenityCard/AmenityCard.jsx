@@ -97,23 +97,7 @@ function AmenityCard({ amenity }) {
                 </span>
             </div>
 
-
-
-
             <div className="amenity-card__divider" />
-
-            <div className="amenity-card__field">
-                <label className="amenity-card__field-label" htmlFor={`wait-${id}`}>
-                    Wait Time (min)
-                </label>
-                <input
-                    id={`wait-${id}`}
-                    className="amenity-card__input"
-                    type="number"
-                    value={waitTime}
-                    onChange={(e) => setWaitTime(Number(e.target.value))}
-                />
-            </div>
 
             <div className="amenity-card__field">
                 <label className="amenity-card__field-label" htmlFor={`status-${id}`}>
@@ -128,6 +112,19 @@ function AmenityCard({ amenity }) {
                     <option value="Open">Open</option>
                     <option value="Closed">Closed</option>
                 </select>
+            </div>
+
+            <div className="amenity-card__field">
+                <label className="amenity-card__field-label" htmlFor={`wait-${id}`}>
+                    Wait Time (min)
+                </label>
+                <input
+                    id={`wait-${id}`}
+                    className="amenity-card__input"
+                    type="number"
+                    value={waitTime}
+                    onChange={(e) => setWaitTime(Number(e.target.value))}
+                />
             </div>
 
             <button

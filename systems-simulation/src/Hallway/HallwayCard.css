@@ -32,6 +32,13 @@
     word-break: break-all;
 }
 
+.hallway-card__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
 .hallway-card__code--sm {
     font-size: 11px;
 }
@@ -95,3 +102,85 @@
 .hallway-card__congestion--medium   { color: #ff9800; }
 .hallway-card__congestion--high     { color: #f44336; }
 .hallway-card__congestion--unknown  { color: #888; }
+
+.hallway-card__name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-h, #fff);
+}
+
+.hallway-card__meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.hallway-card__status {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.hallway-card__status--open   { color: #4caf50; }
+.hallway-card__status--closed { color: #f44336; }
+
+.hallway-card__coord-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.hallway-card__coord-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted, #888);
+    min-width: 28px;
+}
+
+.hallway-card__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hallway-card__field-label {
+    font-size: 12px;
+    color: var(--text-muted, #888);
+}
+
+.hallway-card__input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--social-bg, #2a2a2a);
+    color: var(--text-h, #fff);
+    font-size: 13px;
+
+    &:focus {
+        outline: 2px solid var(--accent, #646cff);
+        outline-offset: 2px;
+    }
+}
+
+.hallway-card__update-btn {
+    margin-top: 4px;
+    padding: 7px 0;
+    width: 100%;
+    border: none;
+    border-radius: 6px;
+    background: var(--accent, #646cff);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+
+    &:hover { opacity: 0.85; }
+    &:active { opacity: 0.7; }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+}

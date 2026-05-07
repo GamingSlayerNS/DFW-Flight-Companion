@@ -72,9 +72,9 @@ async function populateNodes() {
             AmenityType: "Restroom",
             Congestion: "Low",
             IsAccessible: true,
-            Name: props.name,
-            NodeID: props.id,
-            SubTypeName: props.gender,
+            name: props.name,
+            id: props.id,
+            type: props.gender,
             WaitTime: 0.0,
             coordinates: [new GeoPoint(lat, lng)],
         });

@@ -139,7 +139,7 @@ fun MapScreen(
     val mapRef = remember { mutableStateOf<MapLibreMap?>(null)}
 
     // User's current location (Simulation)
-    val userLocation = remember { mutableStateOf(LatLng(32.897546, -97.044471)) }
+    val userLocation = mapViewModel.userLocation
     val initialCameraPosition = remember { LatLng(32.897546, -97.044471) }
     var currentDestination by remember {
         mutableStateOf<Pair<Double, Double>?>(null)
@@ -223,7 +223,7 @@ fun MapScreen(
             getMapAsync { map ->
                 mapRef.value = map
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
-                    setupSourcesAndLayers(context, style, userLocation.value)
+                    setupSourcesAndLayers(context, style, userLocation)
                     fetchDataFromFunctions(style, amenities, mapNodes, mapViewModel)
                     
                     map.moveCamera(
@@ -302,8 +302,8 @@ fun MapScreen(
 
     // Re-compute the navigation path to display updated navigation instructions when user goes off-route
     fun reroute(destLng: Double, destLat: Double) {
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
         val newPath = computeRoute(userLng, userLat, destLng, destLat)
 
         if (newPath.isNullOrEmpty() || newPath.size < 2) {
@@ -335,8 +335,8 @@ fun MapScreen(
         val currPath = navPath
         if (currPath.isEmpty()) return
 
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
 
         val userNode = Node(userLng, userLat)
         val segmentIndex = findClosestSegmentIndex(userNode, currPath)
@@ -368,8 +368,8 @@ fun MapScreen(
 
     // calculates the distance of the computed route from user to a selected amenity
     fun distanceToUser(amenity: AmenityDetail): Double {
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
         val selectedRR = mapNodes.find { it.id == amenity.nodeId } ?: return Double.POSITIVE_INFINITY
         val route = computeRoute(userLng, userLat,selectedRR.longitude,selectedRR.latitude) ?: return Double.POSITIVE_INFINITY
 
@@ -479,8 +479,8 @@ fun MapScreen(
         val routeSource = style.getSourceAs<GeoJsonSource>("route-source")
 
         // Retrieving user's location
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
 
         // Calculate the route path
         val path = computeRoute(userLng, userLat, destLng, destLat) ?: return@startNav
@@ -517,7 +517,7 @@ fun MapScreen(
         map.animateCamera(
             CameraUpdateFactory.newCameraPosition(
                 CameraPosition.Builder()
-                    .target(userLocation.value)
+                    .target(userLocation)
                     .zoom(18.0)
                     .bearing(map.cameraPosition.bearing) // Face direction of the user
                     .tilt(45.0)
@@ -667,18 +667,11 @@ fun MapScreen(
         val routeSource = style.getSourceAs<GeoJsonSource>("route-source") ?: return
 
         // Retrieving user's location
-        val userLng = userLocation.value.longitude
-        val userLat = userLocation.value.latitude
+        val userLng = userLocation.longitude
+        val userLat = userLocation.latitude
 
         // Calculate the route path
         val path = computeRoute(userLng, userLat, destLng, destLat) ?: return
-
-        val dx = userLng - destLng
-        val dy = userLat - destLat
-        if (dx * dx + dy * dy < CLOSE_THRESHOLD * CLOSE_THRESHOLD) {
-            cancelNavigation()
-            return
-        }
 
         if (isNavigating) {
             updateNavigationStep(destLng, destLat)
@@ -732,7 +725,7 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(userLocation.value, currentDestination) {
+    LaunchedEffect(userLocation, currentDestination) {
         if(isNavigating) {
             val destination = currentDestination ?: return@LaunchedEffect
 
@@ -865,8 +858,8 @@ fun MapScreen(
     fun moveUser(direction: Direction) {
         val step = 0.00005  // adjust for speed
 
-        val currentLng = userLocation.value.longitude
-        val currentLat = userLocation.value.latitude
+        val currentLng = userLocation.longitude
+        val currentLat = userLocation.latitude
 
         val (newLng, newLat) = when (direction) {
             Direction.UP -> currentLng to (currentLat + step)
@@ -876,7 +869,7 @@ fun MapScreen(
         }
 
         // update your state
-        userLocation.value = LatLng(newLat, newLng)
+        mapViewModel.updateLocation(LatLng(newLat, newLng))
 
         // update map + camera
         updateUserLocation(newLng, newLat)
@@ -997,7 +990,7 @@ fun MapScreen(
                                     mapRef.value?.animateCamera(
                                         CameraUpdateFactory.newCameraPosition(
                                             CameraPosition.Builder()
-                                                .target(userLocation.value)
+                                                .target(userLocation)
                                                 .zoom(18.0)
                                                 .bearing(mapRef.value?.cameraPosition?.bearing ?: 0.0)
                                                 .tilt(45.0)
@@ -1589,8 +1582,8 @@ fun MapScreen(
                                                 CameraPosition.Builder()
                                                     .target(
                                                         LatLng(
-                                                            userLocation.value.latitude,
-                                                            userLocation.value.longitude
+                                                            userLocation.latitude,
+                                                            userLocation.longitude
                                                         )
                                                     )
                                                     .zoom(18.0)

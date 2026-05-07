@@ -1,23 +1,19 @@
 import { useState } from "react";
+import AmenityCard from "./AmenityCard";
 
-import HallwayCard from "./HallwayCard";
-
-function Hallway({ nodes, status }) {
-
-    const nodeEntries = Object.entries(nodes);
-
+function Amenity({ amenities, status }) {
     const [search, setSearch] = useState("");
 
-    const filtered = nodeEntries.filter(([nodeId, data]) => {
+    const filtered = amenities.filter((doc) => {
         const q = search.toLowerCase();
         return (
-            data.name?.toLowerCase().includes(q) ||
-            nodeId.toLowerCase().includes(q)
+            doc.Name?.toLowerCase().includes(q) ||
+            doc.id?.toLowerCase().includes(q)
         );
     });
 
     return (
-        <div>
+        <>
             <p style={{ fontSize: "13px", color: "var(--text-muted, #888)", marginBottom: "16px" }}>
                 {status}
             </p>
@@ -30,17 +26,15 @@ function Hallway({ nodes, status }) {
             />
             {filtered.length > 0 ? (
                 <div className="amenity-grid">
-                    {filtered.map(([nodeId, data]) => (
-                        <HallwayCard key={nodeId} nodeId={nodeId} data={data} />
+                    {filtered.map((doc) => (
+                        <AmenityCard key={doc.id} amenity={doc} />
                     ))}
                 </div>
             ) : (
-                <p style={{ color: "var(--text-muted, #888)", fontSize: "14px" }}>
-                    No edges found under <code>MapData/currentGraph/edges</code>.
-                </p>
+                <p>No documents found in the <code>Amenity</code> collection yet.</p>
             )}
-        </div>
+        </>
     );
 }
 
-export default Hallway;
+export default Amenity;

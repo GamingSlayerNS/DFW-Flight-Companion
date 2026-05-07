@@ -73,7 +73,7 @@ async function populateNodes() {
             name: props.name,
             level: props.level,
             gender: props.gender ?? '',
-            coordinates: [new GeoPoint(lat, lng)],
+            coordinates: new GeoPoint(lat, lng),
         });
         count++;
     });

@@ -28,7 +28,7 @@ data class NavigationGraph(
 object NavigationGraphRepository {
 
     private val database = FirebaseDatabase.getInstance()
-    private val graphRef = database.getReference("MapData/currentGraph")
+    private val graphRef = database.getReference("MapData/CurrentGraph")
 
     private val _navigationGraph = MutableStateFlow<NavigationGraph?>(null)
     val navigationGraph: StateFlow<NavigationGraph?> = _navigationGraph

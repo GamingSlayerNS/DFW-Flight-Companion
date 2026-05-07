@@ -108,6 +108,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.LineString
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 fun formatTimeAgo(timestamp: Long): String {
     if (timestamp == 0L) return "Never"
@@ -137,6 +138,7 @@ fun MapScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var isNavigating by remember { mutableStateOf(false) }
     val mapRef = remember { mutableStateOf<MapLibreMap?>(null)}
+    val coroutineScope = rememberCoroutineScope()
 
     // User's current location (Simulation)
     val userLocation = mapViewModel.userLocation
@@ -875,6 +877,38 @@ fun MapScreen(
         updateUserLocation(newLng, newLat)
     }
 
+    fun moveUserToNextNode(){
+        if (turnSegments.isEmpty() || currentStepIndex >= turnSegments.size) return
+        val nextTurnSegment = turnSegments[currentStepIndex]
+        val turnNode = navPath.getOrNull(nextTurnSegment) ?: return
+
+        val startLat = userLocation.latitude
+        val startLng = userLocation.longitude
+        val targetLat = turnNode.lat   // .toDouble() if it's a String
+        val targetLng = turnNode.lng  // .toDouble() if it's a String
+
+        val deltaLat = targetLat - startLat
+        val deltaLng = targetLng - startLng
+
+        // Constant speed: same per-frame step you had before
+        val stepDeg = 0.000005
+        val frameMs = 16L  // ~60fps
+        val distance = sqrt(deltaLat * deltaLat + deltaLng * deltaLng)
+        val totalSteps = (distance / stepDeg).toInt().coerceAtLeast(1)
+
+        coroutineScope.launch {
+            for (i in 1..totalSteps) {
+                val t = i.toDouble() / totalSteps   // 0.0 -> 1.0
+                val newLat = startLat + deltaLat * t
+                val newLng = startLng + deltaLng * t
+
+                mapViewModel.updateLocation(LatLng(newLat, newLng))
+                updateUserLocation(newLng, newLat)
+                delay(frameMs)
+            }
+        }
+    }
+
     val filterButtonPadding = if (cameraBearing in 0.0000000001..359.9999999999) {
         Modifier.padding(top = 56.dp, end = 6.dp)   // facing off-north
     } else {
@@ -1454,73 +1488,109 @@ fun MapScreen(
                 }
             }
             if (currentNavInstruction.isNotEmpty() && !showAmenityBox) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth(0.95f)
-                        .padding(bottom = 12.dp)
-                        .align(Alignment.BottomCenter)
-                        .padding(top = 32.dp)
-                        .background(androidx.compose.ui.graphics.Color(0xFF00008B).copy(alpha = 0.9f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Column {
-                            val iconRes = when {
-                                currentNavInstruction.contains("right", ignoreCase = true) ->
-                                    R.drawable.right_turn_arrow
-                                currentNavInstruction.contains("left", ignoreCase = true) ->
-                                    R.drawable.left_turn_arrow
-                                else ->
-                                    R.drawable.arrived_icon
+                            .align(Alignment.End)
+                            .padding(end = 12.dp, bottom = 8.dp)
+                            .background(
+                                androidx.compose.ui.graphics.Color(0xFF61A2FF),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable {moveUserToNextNode()}
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = "Move to Next Position",
+                            color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.95f)
+                            .padding(bottom = 12.dp)
+                            .background(
+                                androidx.compose.ui.graphics.Color(0xFF00008B).copy(alpha = 0.9f),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                val iconRes = when {
+                                    currentNavInstruction.contains("right", ignoreCase = true) ->
+                                        R.drawable.right_turn_arrow
+
+                                    currentNavInstruction.contains("left", ignoreCase = true) ->
+                                        R.drawable.left_turn_arrow
+
+                                    else ->
+                                        R.drawable.arrived_icon
+                                }
+
+                                Image(
+                                    painter = painterResource(id = iconRes),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp)
+                                )
+
+                                Text(
+                                    text = currentNavDistanceToTurn,
+                                    color = androidx.compose.ui.graphics.Color.White,
+                                    fontSize = 24.sp
+                                )
                             }
 
-                            Image(
-                                painter = painterResource(id = iconRes),
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp)
-                            )
+                            Spacer(modifier = Modifier.width(20.dp))
 
                             Text(
-                                text = currentNavDistanceToTurn,
+                                text = currentNavInstruction,
                                 color = androidx.compose.ui.graphics.Color.White,
-                                fontSize = 24.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(20.dp))
-
-                        Text(
-                            text = currentNavInstruction,
-                            color = androidx.compose.ui.graphics.Color.White,
-                            fontSize = 32.sp,
-                            modifier = Modifier.weight(1f),
-                            style = TextStyle(
-                                lineHeight = 32.sp // increase this for more spacing
-                            )
-                        )
-
-                        Column(
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(end = 6.dp)
-                                    .background(androidx.compose.ui.graphics.Color(0xffdd0d3c), RoundedCornerShape(12.dp))
-                                    .clickable { cancelNavigation() }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "End",
-                                    color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold
+                                fontSize = 32.sp,
+                                modifier = Modifier.weight(1f),
+                                style = TextStyle(
+                                    lineHeight = 32.sp // increase this for more spacing
                                 )
+                            )
+
+                            Column(
+                                horizontalAlignment = Alignment.End
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(end = 6.dp)
+                                        .background(
+                                            androidx.compose.ui.graphics.Color(0xffdd0d3c),
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .clickable { cancelNavigation() }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "End",
+                                        color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
@@ -1893,7 +1963,7 @@ private fun findClosestSegmentIndex(user: Node, path: List<Node>): Int {
         val dy = projected.lat - user.lat
         val dist = dx*dx + dy*dy
 
-        if (dist < bestDist) {
+        if (dist <= bestDist) {
             bestDist = dist
             bestIndex = i
         }

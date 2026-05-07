@@ -1,0 +1,97 @@
+.hallway-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    background: var(--bg-alt, #1a1a1a);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 260px;
+}
+
+.hallway-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.hallway-card__label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent, #646cff);
+}
+
+.hallway-card__code {
+    font-size: 12px;
+    background: var(--social-bg, #2a2a2a);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--text-h, #fff);
+    word-break: break-all;
+}
+
+.hallway-card__code--sm {
+    font-size: 11px;
+}
+
+.hallway-card__coords {
+    font-size: 12px;
+    color: var(--text-muted, #888);
+}
+
+.hallway-card__divider {
+    border-top: 1px solid var(--border);
+    margin: 2px 0;
+}
+
+.hallway-card__section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.hallway-card__empty {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted, #888);
+}
+
+.hallway-card__neighbors {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.hallway-card__neighbor {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    border-radius: 6px;
+    background: var(--social-bg, #2a2a2a);
+}
+
+.hallway-card__neighbor-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.hallway-card__congestion {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.hallway-card__congestion--low      { color: #4caf50; }
+.hallway-card__congestion--medium   { color: #ff9800; }
+.hallway-card__congestion--high     { color: #f44336; }
+.hallway-card__congestion--unknown  { color: #888; }

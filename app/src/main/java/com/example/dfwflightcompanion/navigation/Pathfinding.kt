@@ -134,19 +134,20 @@ object Pathfinding {
         b: Node,
         snapped: Node
     ): Map<Node, List<Edge>> {
-        // If snapped landed exactly on an existing node, no insertion needed
         if (snapped == a || snapped == b) return graph
 
         val newGraph = graph.mapValues { it.value.toMutableList() }.toMutableMap()
 
-        // Remove original edge in both directions
+        // Preserve original edge congestion for the split edges
+        val congestionAB = newGraph[a]?.find { it.target == b }?.congestion ?: 0.0
+        val congestionBA = newGraph[b]?.find { it.target == a }?.congestion ?: 0.0
+
         newGraph[a]?.removeAll { it.target == b }
         newGraph[b]?.removeAll { it.target == a }
 
-        // Connect snapped node to both endpoints (no congestion for temporary node)
-        newGraph[snapped] = mutableListOf(Edge(a), Edge(b))
-        newGraph[a]?.add(Edge(snapped))
-        newGraph[b]?.add(Edge(snapped))
+        newGraph[snapped] = mutableListOf(Edge(a, congestionBA), Edge(b, congestionAB))
+        newGraph[a]?.add(Edge(snapped, congestionAB))
+        newGraph[b]?.add(Edge(snapped, congestionBA))
 
         return newGraph
     }

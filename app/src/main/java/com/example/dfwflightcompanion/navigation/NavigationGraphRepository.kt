@@ -1,6 +1,5 @@
 package com.example.dfwflightcompanion.navigation
 
-import android.util.Log
 import com.google.firebase.database.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +12,7 @@ data class GraphNode(
 data class GraphNeighbor(
     val lat: Double = 0.0,
     val lng: Double = 0.0,
-    val congestion: Int = 0
+    val congestion: Double = 0.0
 )
 
 data class GraphEntry(
@@ -66,7 +65,7 @@ object NavigationGraphRepository {
                             val neighbor = GraphNeighbor(
                                 lat = neighborSnapshot.child("lat").getValue(Double::class.java) ?: 0.0,
                                 lng = neighborSnapshot.child("lng").getValue(Double::class.java) ?: 0.0,
-                                congestion = neighborSnapshot.child("congestion").getValue(Int::class.java) ?: 0
+                                congestion = neighborSnapshot.child("congestion").getValue(Double::class.java) ?: 0.0
                             )
                             neighbors[neighborSnapshot.key ?: continue] = neighbor
                         }
@@ -80,7 +79,6 @@ object NavigationGraphRepository {
                     )
 
                     val edgeSnapshot = snapshot.child("edges")
-                    Log.d("NavGraphRepo", "Edge snapshot exists: ${edgeSnapshot.exists()}, child count: ${edgeSnapshot.childrenCount}")
                     val edgeEntries = mutableListOf<String>()
                     for (edge in edgeSnapshot.children) {
                         val name = edge.child("name").getValue(String::class.java) ?: ""
@@ -103,7 +101,6 @@ object NavigationGraphRepository {
                     }
 
                     val edgeGeoJson = """{"type": "FeatureCollection", "features": [${edgeEntries.joinToString(",")}]}"""
-                    Log.d("NavGraphRepo", "edgeList built with ${edgeEntries.size} features: $edgeGeoJson")
                     _edgeList.value = edgeGeoJson
                     _isLoading.value = false
                     _error.value = null

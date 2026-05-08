@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -61,6 +62,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
@@ -552,61 +554,88 @@ fun MapScreen(
     // alert box for updating crowd level
     var showCrowdLvlBox by remember { mutableStateOf(false) }
     if (showCrowdLvlBox) {
+        var selectedLevel by remember { mutableStateOf(selectedAmenity?.congestion) }
         AlertDialog(
             onDismissRequest = { showCrowdLvlBox = false },
             title = {
                 Text(
                     "Current Crowd Level",
-                    modifier = Modifier.padding(top = 12.dp, start = 10.dp)
+                    modifier = Modifier.padding(top = 12.dp, start = 10.dp),
+                    fontFamily = FontFamily.Serif
                 )
             },
             text = {
                 Column {
-                    listOf("Low", "Medium", "High").forEach { level ->
-                        Text(
-                            text = level,
+                    Text(
+                        "Location  •  ${selectedAmenity?.name}",
+                        modifier = Modifier.padding(start = 10.dp, bottom = 10.dp),
+                        fontFamily = FontFamily.Serif,
+                        fontSize = 14.sp
+                    )
+                    val options = listOf("Low", "Medium", "High")
+
+                    options.forEach { level ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    selectedAmenity?.let { amenity ->
-                                        val functions = Firebase.functions
-                                        val data = hashMapOf(
-                                            "amenityId" to amenity.id,
-                                            "congestion" to level
-                                        )
-                                        functions.getHttpsCallable("updateAmenityCongestion").call(data)
-                                            .addOnSuccessListener {
-                                                Log.d("FirestoreDB", "Amenity congestion updated successfully to $level")
-                                                // Update local state
-                                                val index = amenities.indexOfFirst { it.id == amenity.id }
-                                                if (index != -1) {
-                                                    val updated = amenities[index].copy(
-                                                        congestion = level,
-                                                        lastUpdated = System.currentTimeMillis()
-                                                    )
-                                                    amenities[index] = updated
-                                                    selectedAmenity = updated
-                                                }
-                                            }
-                                            .addOnFailureListener { e ->
-                                                Log.e("FirestoreDB", "Error updating amenity congestion", e)
-                                            }
-                                    }
-                                    showCrowdLvlBox = false
-                                }
-                                .padding(12.dp)
-                        )
+                                .clickable { selectedLevel = level }
+                                .padding(vertical = 2.dp)
+                        ) {
+                            RadioButton(
+                                selected = selectedLevel == level,
+                                onClick = { selectedLevel = level }
+                            )
+                            Text(level, modifier = Modifier.padding(start = 8.dp))
+                        }
                     }
                 }
             },
             confirmButton = {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    TextButton(onClick = { showCrowdLvlBox = false }) {
-                        Text("Cancel")
+                TextButton(
+                    onClick = {
+                        if (selectedLevel != null) {
+                            selectedAmenity?.let { amenity ->
+                                val functions = Firebase.functions
+                                val data = hashMapOf(
+                                    "amenityId" to amenity.id,
+                                    "congestion" to selectedLevel
+                                )
+                                functions.getHttpsCallable("updateAmenityCongestion")
+                                    .call(data)
+                                    .addOnSuccessListener {
+                                        Log.d(
+                                            "FirestoreDB",
+                                            "Amenity congestion updated successfully to $selectedLevel"
+                                        )
+                                        // Update local state
+                                        val index =
+                                            amenities.indexOfFirst { it.id == amenity.id }
+                                        if (index != -1) {
+                                            val updated = amenities[index].copy(
+                                                congestion = selectedLevel!!,
+                                                lastUpdated = System.currentTimeMillis()
+                                            )
+                                            amenities[index] = updated
+                                            selectedAmenity = updated
+                                        }
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Log.e(
+                                            "FirestoreDB",
+                                            "Error updating amenity congestion",
+                                            e
+                                        )
+                                    }
+                            }
+                            showCrowdLvlBox = false
+                        }
                     }
+                ) { Text("Submit") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCrowdLvlBox = false }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -1051,6 +1080,8 @@ fun MapScreen(
             val selectedBackground = remember(selectedDest, mapBackgrounds) {
                 findBackgroundForSelectedDest(selectedDest, mapBackgrounds)
             }
+            val selectedAmenityDist = selectedAmenity?.let { distanceToUser(it) }?.toInt()
+            val selectedAmenityTime = (selectedAmenityDist?.div(40.0)?.toInt()?.coerceAtLeast(1)) ?: 1
 
             Box(
                 modifier = Modifier
@@ -1061,12 +1092,17 @@ fun MapScreen(
                     modifier = Modifier
                         .offset { IntOffset(0, offsetY.roundToInt()) }
                         .fillMaxWidth()
-                        .height(250.dp)
+                        .height(300.dp)
                         .clip(
                             RoundedCornerShape(
                                 topStart = 32.dp,
                                 topEnd = 32.dp
                             )
+                        )
+                        .border(
+                            width = 0.5.dp,
+                            color = androidx.compose.ui.graphics.Color.LightGray,
+                            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
                         )
                         .align(Alignment.BottomCenter)
                         .background(androidx.compose.ui.graphics.Color(0xFFF5F5F5))
@@ -1145,7 +1181,7 @@ fun MapScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(top = 40.dp, start = 36.dp),
+                            .padding(top = 40.dp, start = 36.dp, end = 36.dp),
                         horizontalAlignment = Alignment.Start,
                         verticalArrangement = Arrangement.Top
                     ) {
@@ -1194,7 +1230,9 @@ fun MapScreen(
                             )
                             Text(
                                 text = selectedAmenity?.congestion ?: "Low",
-                                color = androidx.compose.ui.graphics.Color(0xFF00C853),
+                                color = if (selectedAmenity?.congestion.equals("Low", ignoreCase = true)) androidx.compose.ui.graphics.Color(0xFF00C853)
+                                else if (selectedAmenity?.congestion.equals("Medium", ignoreCase = true)) androidx.compose.ui.graphics.Color(0xFFE59400)
+                                else androidx.compose.ui.graphics.Color(0xFFE74C3C),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 fontFamily = FontFamily.SansSerif,
@@ -1220,6 +1258,21 @@ fun MapScreen(
                             )
                         }
 
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "Distance  •  $selectedAmenityDist ft  •  $selectedAmenityTime min",
+                                color = androidx.compose.ui.graphics.Color.Black,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                modifier = Modifier.alignBy(FirstBaseline)
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Row(
@@ -1228,11 +1281,42 @@ fun MapScreen(
                             Button(
                                 onClick = {
                                     showCrowdLvlBox = true
-                                }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 21.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = androidx.compose.ui.graphics.Color.DarkGray,
+                                    contentColor = androidx.compose.ui.graphics.Color.White
+                                )
                             ) {
-                                Text("Update Crowd Level")
+                                Text("Update Crowd Level", fontSize = 12.sp)
                             }
-
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Button(
+                                onClick = {
+                                    navController.navigate(Routes.userReport(
+                                        selectedAmenityId,
+                                        selectedAmenity?.name
+                                    ))
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 21.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = androidx.compose.ui.graphics.Color(0xFFD32F2F),
+                                    contentColor = androidx.compose.ui.graphics.Color.White
+                                )
+                            ) {
+                                Text("Submit an Issue", fontSize = 12.sp)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(0.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Button(
                                 onClick = {
                                     showAmenityBox = false
@@ -1240,7 +1324,12 @@ fun MapScreen(
                                         startNavigation(lng, lat)
                                     }
                                     currentDestination = selectedDest
-                                }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = androidx.compose.ui.graphics.Color(0xFF0018A8),
+                                    contentColor = androidx.compose.ui.graphics.Color.White
+                                )
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Navigation,
@@ -1249,32 +1338,6 @@ fun MapScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Start Navigation")
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(end = 36.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                            ){
-                            Button(
-                                onClick = {
-                                    navController.navigate(Routes.userReport(
-                                        selectedAmenityId,
-                                        selectedAmenity?.name
-                                    ))
-                                },
-                                modifier = Modifier.height(32.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = androidx.compose.ui.graphics.Color(0xFFD32F2F),
-                                    contentColor = androidx.compose.ui.graphics.Color.White
-                                ),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text("Submit an Issue", fontSize = 12.sp)
                             }
                         }
                     }
@@ -1702,6 +1765,12 @@ fun MapScreen(
                                             ) ->
                                                 R.drawable.left_turn_arrow
 
+                                            currentNavInstruction.contains(
+                                                "u-turn",
+                                                ignoreCase = true
+                                            ) ->
+                                                R.drawable.u_turn_arrow
+
                                             else ->
                                                 R.drawable.arrived_icon
                                         }
@@ -1712,11 +1781,13 @@ fun MapScreen(
                                             modifier = Modifier.size(48.dp)
                                         )
 
-                                        Text(
-                                            text = currentNavDistanceToTurn,
-                                            color = androidx.compose.ui.graphics.Color.White,
-                                            fontSize = 24.sp
-                                        )
+                                        Row(modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                                            Text(
+                                                text = currentNavDistanceToTurn,
+                                                color = androidx.compose.ui.graphics.Color.White,
+                                                fontSize = 24.sp
+                                            )
+                                        }
                                     }
 
                                     Spacer(modifier = Modifier.width(20.dp))
@@ -1796,7 +1867,7 @@ fun MapScreen(
                                                     )
                                                 } else if (step.contains("U-Turn", ignoreCase= true)) {
                                                     Image(
-                                                        painter = painterResource(id = R.drawable.left_turn_arrow),
+                                                        painter = painterResource(id = R.drawable.u_turn_arrow),
                                                         contentDescription = null,
                                                         modifier = Modifier.size(24.dp)
                                                     )

@@ -16,8 +16,6 @@ const getOrCreateNode = (nodePool, lat, lng) => {
     return newNode;
 };
 
-const rtdbKey = (lng, lat) => `${lng},${lat}`.replace(/\./g, "_");
-
 exports.getMapBackgrounds = onCall(async (request) => {
     try {
         logger.info("Fetching MapBackgrounds from Firestore...");

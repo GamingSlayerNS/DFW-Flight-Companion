@@ -8,6 +8,7 @@ import "./App.css";
 import { db, rtdb } from "./firebase.js";
 import Populate from "./Populate/Populate.jsx";
 import Amenity from "./Amenity/Amenity.jsx";
+import AmenityUnit from "./AmenityUnits/AmenityUnit.jsx";
 import Hallway from "./Hallway/Hallway.jsx";
 
 function App() {
@@ -15,7 +16,7 @@ function App() {
     const [activeTab, setActiveTab] = useState("Amenity");
 
     const [amenities, setAmenities] = useState([]);
-    const [amenityStatus, setAmenityStatus] = useState("")
+    const [amenityStatus, setAmenityStatus] = useState("");
     useEffect(() => {
         setStatus("Connecting to Firestore...");
 
@@ -24,18 +25,17 @@ function App() {
             (snapshot) => {
                 setAmenities(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
                 setStatus(`Connected to ${db.app.options.projectId}.`);
-                setAmenityStatus(`Loaded ${snapshot.size} amenities.`)
+                setAmenityStatus(`Loaded ${snapshot.size} amenities.`);
             },
             (error) => {
                 console.error("Firestore listener error:", error);
                 setStatus(`Firestore error: ${error.message}`);
-            }
+            },
         );
-        
+
         return () => unsubscribe();
     }, []);
 
-    
     const [nodes, setNodes] = useState({});
     const [nodeStatus, setNodeStatus] = useState("");
     useEffect(() => {
@@ -51,13 +51,12 @@ function App() {
             (error) => {
                 console.error("RTDB listener error:", error);
                 setStatus(`Error: ${error.message}`);
-            }
+            },
         );
 
         return () => unsubscribe();
-    }, []); 
+    }, []);
 
-    
     return (
         <>
             <section id="center">
@@ -70,7 +69,7 @@ function App() {
 
             <section id="next-steps" style={{ display: "flex", flexDirection: "column" }}>
                 <nav className="tab-bar">
-                    {["Amenity", "Hallway", "Populate"].map((tab) => (
+                    {["Amenity", "Stalls", "Hallway", "Populate"].map((tab) => (
                         <button
                             key={tab}
                             className={`tab-button${activeTab === tab ? " tab-button--active" : ""}`}
@@ -82,9 +81,10 @@ function App() {
                 </nav>
 
                 <div className="tab-content">
-                    {activeTab === "Amenity" && <Amenity amenities={amenities} status={amenityStatus}/>}
+                    {activeTab === "Amenity" && <Amenity amenities={amenities} status={amenityStatus} />}
+                    {activeTab === "Stalls" && <AmenityUnit amenities={amenities} status={amenityStatus} />}
 
-                    {activeTab === "Hallway" && <Hallway nodes={nodes} status={nodeStatus}/>}
+                    {activeTab === "Hallway" && <Hallway nodes={nodes} status={nodeStatus} />}
 
                     {activeTab === "Populate" && <Populate />}
                 </div>
@@ -97,4 +97,3 @@ function App() {
 }
 
 export default App;
-

@@ -3,31 +3,32 @@ import floorplanRaw from "/src/assets/mapdata/floorplan.geojson?raw";
 import { collection, getDocs, writeBatch, doc, GeoPoint } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
+import { useState } from "react";
 
 const GEO_COLLECTIONS = ["MapBackground", "MapNode", "PathEdge"];
-const MISC_COLLECTIONS = ["Terminal", "AmenityUnit", "AmenitySchedule", "Sensor", "User", "UserReports"];
+const MISC_COLLECTIONS = ["Terminal", "User", "UserReports"];
 
-async function wipeGeoCollections() {
+async function wipeGeoCollections(addLog) {
     for (const name of GEO_COLLECTIONS) {
         const snapshot = await getDocs(collection(db, name));
         const batch = writeBatch(db);
         snapshot.forEach((d) => batch.delete(d.ref));
         await batch.commit();
-        console.log(`Wiped ${name} (${snapshot.size} docs)`);
+        addLog(`Wiped ${name} (${snapshot.size} docs)`);
     }
 }
 
-async function wipeMisc() {
+async function wipeMisc(addLog) {
     for (const name of MISC_COLLECTIONS) {
         const snapshot = await getDocs(collection(db, name));
         const batch = writeBatch(db);
         snapshot.forEach((d) => batch.delete(d.ref));
         await batch.commit();
-        console.log(`Wiped ${name} (${snapshot.size} docs)`);
+        addLog(`Wiped ${name} (${snapshot.size} docs)`);
     }
 }
 
-async function populateBackground() {
+async function populateBackground(addLog) {
     const floorplanData = JSON.parse(floorplanRaw);
     const batch = writeBatch(db);
     let count = 0;
@@ -51,10 +52,10 @@ async function populateBackground() {
     });
 
     await batch.commit();
-    console.log(`MapBackgrounds seeded: ${count} polygons.`);
+    addLog(`MapBackgrounds seeded: ${count} polygons.`);
 }
 
-async function populateNodes() {
+async function populateNodes(addLog) {
     const routingData = JSON.parse(routingRaw);
     const batch = writeBatch(db);
     let count = 0;
@@ -79,10 +80,10 @@ async function populateNodes() {
     });
 
     await batch.commit();
-    console.log(`MapNodes seeded: ${count} nodes.`);
+    addLog(`MapNodes seeded: ${count} nodes.`);
 }
 
-async function populatePathEdges() {
+async function populatePathEdges(addLog) {
     const routingData = JSON.parse(routingRaw);
     const batch = writeBatch(db);
     let segmentCount = 0;
@@ -111,66 +112,150 @@ async function populatePathEdges() {
     });
 
     await batch.commit();
-    console.log(`PathEdges seeded: ${segmentCount} segments.`);
+    addLog(`PathEdges seeded: ${segmentCount} segments.`);
 }
 
-async function populateGeoCollection() {
-    await wipeGeoCollections();
-    await populateNodes();
-    await populateBackground();
-    await populatePathEdges();
+async function populateGeoCollection(addLog) {
+    await wipeGeoCollections(addLog);
+    await populateNodes(addLog);
+    await populateBackground(addLog);
+    await populatePathEdges(addLog);
 }
 
-async function publishNavigationGraph() {
+async function publishNavigationGraph(addLog) {
     try {
         const fn = httpsCallable(functions, "publishGraphToRealtime");
         const result = await fn();
-        console.log("publishNavigationGraph result:", result.data);
+        addLog("publishNavigationGraph result: " + JSON.stringify(result.data));
     } catch (e) {
         console.error("publishNavigationGraph failed:", e);
     }
 }
 
-async function populateAmenity() {
+async function populateAmenity(addLog) {
     try {
         const amenitySnapshot = await getDocs(collection(db, "Amenity"));
         const deleteBatch = writeBatch(db);
         amenitySnapshot.forEach((doc) => deleteBatch.delete(doc.ref));
         await deleteBatch.commit();
-        console.log("Wiped old amenities. Adding new ones...");
+        addLog("Wiped old amenities. Adding new ones...");
 
         const routingData = JSON.parse(routingRaw);
         const routingFeatures = routingData.features;
 
-        const addBatch = writeBatch(db);
-        routingFeatures.forEach((feature) => {
-            const props = feature.properties;
-            if (props.type === "poi") {
-                const id = props.id;
-                const docRef = doc(collection(db, "Amenity"), id);
-                addBatch.set(docRef, {
-                    AmenityID: id,
-                    Name: props.name,
-                    AmenityType: "Restroom",
-                    SubTypeName: props.gender,
-                    Congestion: "Low",
-                    WaitTime: 0.0,
-                    LastUpdated: Date.now(),
-                    IsAccessible: true,
-                    NodeID: id,
-                });
-            }
-        });
+        const amenityBatch = writeBatch(db);
+        let amenityCount = 0;
 
-        await addBatch.commit();
-        console.log("Successfully added amenities.");
+        for (const feature of routingFeatures) {
+            const props = feature.properties;
+            if (props.type !== "poi") continue;
+
+            const id = props.id;
+            const amenityRef = doc(collection(db, "Amenity"), id);
+
+            amenityBatch.set(amenityRef, {
+                AmenityID: id,
+                Name: props.name,
+                AmenityType: "Restroom",
+                SubTypeName: props.gender ?? "",
+                Congestion: "Low",
+                WaitTime: 0.0,
+                LastUpdated: Date.now(),
+                IsAccessible: true,
+                NodeID: id,
+            });
+            amenityCount++;
+        }
+        //add console logging for updates
+
+        await amenityBatch.commit();
+        addLog(`Successfully added ${amenityCount} amenities.`);
     } catch (e) {
         console.error("Error during amenity population", e);
     }
 }
 
-async function populateMisc() {
-    await wipeMisc();
+async function populateAmenityUnits(addLog) {
+    try {
+        await Promise.all([wipeCollection("AmenityUnit"), wipeCollection("AmenitySchedule"), wipeCollection("Sensor")]);
+
+        const amenitySnapshot = await getDocs(collection(db, "Amenity"));
+        const amenityDocs = amenitySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+        let unitBatch = writeBatch(db);
+        let detailCount = 0;
+        let amenityCount = 0;
+
+        const commitUnitBatchIfFull = async () => {
+            if (detailCount >= 400) {
+                await unitBatch.commit();
+                unitBatch = writeBatch(db);
+                detailCount = 0;
+            }
+        };
+
+        for (const amenity of amenityDocs) {
+            const amenityId = amenity.AmenityID ?? amenity.id;
+            const accessible = String(amenity.SubTypeName ?? "")
+                .toLowerCase()
+                .includes("accessible");
+            const unitCount = accessible ? 2 : 6;
+
+            unitBatch.set(doc(collection(db, "AmenitySchedule"), `${amenityId}_schedule`), {
+                AmenityScheduleID: `${amenityId}_schedule`,
+                AmenityID: amenityId,
+                OperatingHours: "9am-5pm",
+                OpenTime: "09:00",
+                CloseTime: "17:00",
+                IsOpen: true,
+            });
+            detailCount++;
+
+            for (let unitIndex = 1; unitIndex <= unitCount; unitIndex++) {
+                const unitId = `${amenityId}_unit${unitIndex}`;
+                const sensorId = `${amenityId}_sensor${unitIndex}`;
+
+                unitBatch.set(doc(collection(db, "AmenityUnit"), unitId), {
+                    AmenityUnitID: unitId,
+                    AmenityID: amenityId,
+                    SensorID: sensorId,
+                    UnitStatus: "Open",
+                    LastUpdated: Date.now(),
+                    IsOccupied: false,
+                });
+                detailCount++;
+
+                unitBatch.set(doc(collection(db, "Sensor"), sensorId), {
+                    SensorID: sensorId,
+                    AmenityUnitID: unitId,
+                    AmenityID: amenityId,
+                    SensorType: "Occupancy",
+                    Status: "Idle",
+                    LastUpdate: Date.now(),
+                });
+                detailCount++;
+            }
+
+            amenityCount++;
+            await commitUnitBatchIfFull();
+        }
+
+        if (detailCount > 0) await unitBatch.commit();
+        addLog(`Successfully added unit/sensor/schedule data for ${amenityCount} amenities.`);
+    } catch (e) {
+        console.error("Error during amenity unit population", e);
+    }
+}
+
+async function wipeCollection(name) {
+    const snapshot = await getDocs(collection(db, name));
+    const batch = writeBatch(db);
+    snapshot.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+}
+
+async function populateMisc(addLog) {
+    await wipeMisc(addLog);
 
     const batch = writeBatch(db);
 
@@ -178,27 +263,6 @@ async function populateMisc() {
         Name: "Terminal D",
         Description: "DFW International Terminal",
         Center: new GeoPoint(32.8974, -97.0446),
-    });
-
-    batch.set(doc(collection(db, "AmenityUnit")), {
-        StatusID: "S1",
-        AmenityID: "A1",
-        SensorID: "SN1",
-        UnitStatus: "Open",
-        LastUpdated: Date.now(),
-    });
-
-    batch.set(doc(collection(db, "AmenitySchedule")), {
-        AmenityScheduleID: "AS1",
-        AmenityID: "A1",
-        OperatingHours: "24/7",
-    });
-
-    batch.set(doc(collection(db, "Sensor")), {
-        SensorID: "SN1",
-        SensorType: "Occupancy",
-        Status: "Active",
-        LastUpdate: Date.now(),
     });
 
     batch.set(doc(collection(db, "User")), {
@@ -217,10 +281,16 @@ async function populateMisc() {
     });
 
     await batch.commit();
-    console.log("Misc collections seeded.");
+    addLog("Misc collections seeded.");
 }
 
 function Populate() {
+    const [logs, setLogs] = useState([]);
+
+    const addLog = (message) => {
+        setLogs((prevLogs) => [...prevLogs, `${new Date().toLocaleTimeString()}: ${message}`]);
+    };
+
     const buttonStyle = {
         padding: "12px 24px",
         fontSize: "16px",
@@ -252,6 +322,12 @@ function Populate() {
         "&:hover": { backgroundColor: "#db2777" },
     };
 
+    const unitsButtonStyle = {
+        ...buttonStyle,
+        backgroundColor: "#f59e0b",
+        "&:hover": { backgroundColor: "#d97706" },
+    };
+
     const graphButtonStyle = {
         ...buttonStyle,
         backgroundColor: "#10b981",
@@ -259,11 +335,14 @@ function Populate() {
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "20px" }}>
-            <h2 style={{ marginTop: 0, color: "#333" }}>Database Population</h2>
-            <div style={{ display: "flex", flexDirection: "column", width: "20%", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "20px", padding: "20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                <h2 style={{ marginTop: 0, color: "#333" }}>Database Population</h2>
                 <button
-                    onClick={populateGeoCollection}
+                    onClick={async () => {
+                        setLogs([]);
+                        await populateGeoCollection(addLog);
+                    }}
                     style={geoButtonStyle}
                     onMouseEnter={(e) => (e.target.style.backgroundColor = "#2563eb")}
                     onMouseLeave={(e) => (e.target.style.backgroundColor = "#3b82f6")}
@@ -273,7 +352,10 @@ function Populate() {
                     Populate Geo
                 </button>
                 <button
-                    onClick={populateMisc}
+                    onClick={async () => {
+                        setLogs([]);
+                        await populateMisc(addLog);
+                    }}
                     style={miscButtonStyle}
                     onMouseEnter={(e) => (e.target.style.backgroundColor = "#7c3aed")}
                     onMouseLeave={(e) => (e.target.style.backgroundColor = "#8b5cf6")}
@@ -283,7 +365,10 @@ function Populate() {
                     Populate Misc
                 </button>
                 <button
-                    onClick={populateAmenity}
+                    onClick={async () => {
+                        setLogs([]);
+                        await populateAmenity(addLog);
+                    }}
                     style={amenityButtonStyle}
                     onMouseEnter={(e) => (e.target.style.backgroundColor = "#db2777")}
                     onMouseLeave={(e) => (e.target.style.backgroundColor = "#ec4899")}
@@ -293,7 +378,23 @@ function Populate() {
                     Populate Amenity
                 </button>
                 <button
-                    onClick={publishNavigationGraph}
+                    onClick={async () => {
+                        setLogs([]);
+                        await populateAmenityUnits(addLog);
+                    }}
+                    style={unitsButtonStyle}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = "#d97706")}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = "#f59e0b")}
+                    onMouseDown={(e) => (e.target.style.transform = "scale(0.98)")}
+                    onMouseUp={(e) => (e.target.style.transform = "scale(1)")}
+                >
+                    Populate Amenity Units
+                </button>
+                <button
+                    onClick={async () => {
+                        setLogs([]);
+                        await publishNavigationGraph(addLog);
+                    }}
                     style={graphButtonStyle}
                     onMouseEnter={(e) => (e.target.style.backgroundColor = "#059669")}
                     onMouseLeave={(e) => (e.target.style.backgroundColor = "#10b981")}
@@ -302,6 +403,28 @@ function Populate() {
                 >
                     Publish Navigation Graph
                 </button>
+            </div>
+            <div
+                style={{
+                    flex: 1,
+                    border: "1px solid #ccc",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    backgroundColor: "#f9f9f9",
+                }}
+            >
+                <h3>Logs</h3>
+                <div style={{ maxHeight: "400px", overflowY: "auto", fontFamily: "monospace", fontSize: "14px" }}>
+                    {logs.length === 0 ? (
+                        <p>No logs yet.</p>
+                    ) : (
+                        logs.map((log, index) => (
+                            <div key={index} style={{ marginBottom: "5px" }}>
+                                {log}
+                            </div>
+                        ))
+                    )}
+                </div>
             </div>
         </div>
     );

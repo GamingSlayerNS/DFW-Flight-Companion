@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -71,6 +72,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import com.example.dfwflightcompanion.R
+import com.example.dfwflightcompanion.Routes
 import com.example.dfwflightcompanion.helpers.AmenityDetail
 import com.example.dfwflightcompanion.helpers.Direction
 import com.example.dfwflightcompanion.helpers.MapBackground
@@ -1152,10 +1154,11 @@ fun MapScreen(
                             color = androidx.compose.ui.graphics.Color.Black,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.SemiBold,
-                            fontFamily = FontFamily.SansSerif
+                            fontFamily = FontFamily.SansSerif,
+                            modifier = Modifier.padding(end = 20.dp)
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1176,7 +1179,7 @@ fun MapScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1217,7 +1220,7 @@ fun MapScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1246,6 +1249,32 @@ fun MapScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Start Navigation")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 36.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                            ){
+                            Button(
+                                onClick = {
+                                    navController.navigate(Routes.userReport(
+                                        selectedAmenityId,
+                                        selectedAmenity?.name
+                                    ))
+                                },
+                                modifier = Modifier.height(32.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = androidx.compose.ui.graphics.Color(0xFFD32F2F),
+                                    contentColor = androidx.compose.ui.graphics.Color.White
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text("Submit an Issue", fontSize = 12.sp)
                             }
                         }
                     }

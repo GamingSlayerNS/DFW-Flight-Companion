@@ -10,7 +10,10 @@ function Reports() {
         const unsubscribe = onSnapshot(
             collection(db, "UserReports"),
             (snapshot) => {
-                setReports(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+                const sortedReports = snapshot.docs
+                    .map((doc) => ({ id: doc.id, ...doc.data() }))
+                    .sort((a, b) => (b.CreatedAt?.seconds || 0) - (a.CreatedAt?.seconds || 0));
+                setReports(sortedReports);
                 setStatus(`Loaded ${snapshot.size} reports.`);
             },
             (error) => {

@@ -3,6 +3,7 @@ package com.example.dfwflightcompanion.map
 import android.content.Context
 import android.graphics.Color
 import android.util.Log
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -16,6 +17,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +28,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -192,10 +197,12 @@ fun MapScreen(
     var cameraBearing by remember { mutableStateOf(0.0) } // tracking the camera angle
     var currentStepIndex by remember { mutableStateOf(0) }
     var currentDirections by remember { mutableStateOf<List<String>>(emptyList()) }
+    var currentDirectionsWithDistances by remember { mutableStateOf<List<String>>(emptyList()) }
     var turnSegments by remember { mutableStateOf<List<Int>>(emptyList()) }
     var currentNavInstruction by remember { mutableStateOf("") }
     var currentNavDistanceToTurn by remember { mutableStateOf("") }
     var navPath by remember { mutableStateOf<List<Node>>(emptyList()) }
+    var expanded by remember { mutableStateOf(false) } // for expanding the navigation instructions to display full route
 
     var graph by remember { mutableStateOf<Map<Node, List<Edge>>>(emptyMap()) }
 
@@ -330,6 +337,7 @@ fun MapScreen(
             val distanceToTurn = haversine(userLat,userLng,turnNode.lat,turnNode.lng).roundToInt()
             currentNavInstruction = currentDirections[0]
             currentNavDistanceToTurn = "${distanceToTurn}ft"
+            currentDirectionsWithDistances = generateFullRouteList(newPath, currentDirections, turnSegments, currentStepIndex, distanceToTurn)
         } else {
             currentNavInstruction = "Continue"
             currentNavDistanceToTurn = "—"
@@ -368,6 +376,7 @@ fun MapScreen(
             val distanceToTurn = haversine(userLat, userLng, turnNode.lat, turnNode.lng).roundToInt()
             currentNavInstruction = currentDirections[currentStepIndex]
             currentNavDistanceToTurn = "${distanceToTurn}ft"
+            currentDirectionsWithDistances = generateFullRouteList(currPath, currentDirections, turnSegments, currentStepIndex, distanceToTurn)
         }
     }
 
@@ -500,6 +509,7 @@ fun MapScreen(
         currentStepIndex = 0
         lastSegmentIndex = -1
         updateNavigationStep(destLng, destLat)
+        expanded = false
 
         // reset custom filter values
         resetFilterTypes()
@@ -1566,6 +1576,7 @@ fun MapScreen(
                 }
             }
             if (currentNavInstruction.isNotEmpty() && !showAmenityBox) {
+                val screenHeight = LocalConfiguration.current.screenHeightDp.dp
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1593,81 +1604,191 @@ fun MapScreen(
                         )
                     }
 
-
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(0.95f)
-                            .padding(bottom = 12.dp)
-                            .background(
-                                androidx.compose.ui.graphics.Color(0xFF00008B).copy(alpha = 0.9f),
-                                RoundedCornerShape(12.dp)
+                            .fillMaxWidth()
+                            .heightIn(max = screenHeight * 0.7f)   // cap at 70% of screen
+                            .animateContentSize()
+                            .draggable(
+                                orientation = Orientation.Vertical,
+                                state = rememberDraggableState { delta ->
+                                    if (delta < -5) expanded =
+                                        true   // drag navigation instruction box up
+                                    if (delta > 5) expanded =
+                                        false   // drag navigation instruction box down
+                                }
                             )
-                            .padding(horizontal = 24.dp, vertical = 12.dp)
                     ) {
-                        Row(
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Min),
-                            verticalAlignment = Alignment.CenterVertically
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth(0.95f)
+                                .padding(bottom = 12.dp)
+                                .background(
+                                    androidx.compose.ui.graphics.Color(0xFF00008B)
+                                        .copy(alpha = 0.9f),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .padding(horizontal = 24.dp, vertical = 12.dp)
                         ) {
                             Column {
-                                val iconRes = when {
-                                    currentNavInstruction.contains("right", ignoreCase = true) ->
-                                        R.drawable.right_turn_arrow
-
-                                    currentNavInstruction.contains("left", ignoreCase = true) ->
-                                        R.drawable.left_turn_arrow
-
-                                    else ->
-                                        R.drawable.arrived_icon
+                                // Drag handle for navigation instruction box
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(36.dp)
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(
+                                                androidx.compose.ui.graphics.Color.White.copy(
+                                                    alpha = 0.4f
+                                                )
+                                            )
+                                    )
                                 }
 
-                                Image(
-                                    painter = painterResource(id = iconRes),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp)
-                                )
-
-                                Text(
-                                    text = currentNavDistanceToTurn,
-                                    color = androidx.compose.ui.graphics.Color.White,
-                                    fontSize = 24.sp
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(20.dp))
-
-                            Text(
-                                text = currentNavInstruction,
-                                color = androidx.compose.ui.graphics.Color.White,
-                                fontSize = 32.sp,
-                                modifier = Modifier.weight(1f),
-                                style = TextStyle(
-                                    lineHeight = 32.sp // increase this for more spacing
-                                )
-                            )
-
-                            Column(
-                                horizontalAlignment = Alignment.End
-                            ) {
                                 Row(
                                     modifier = Modifier
-                                        .padding(end = 6.dp)
-                                        .background(
-                                            androidx.compose.ui.graphics.Color(0xffdd0d3c),
-                                            RoundedCornerShape(12.dp)
-                                        )
-                                        .clickable { cancelNavigation() }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.Center,
+                                        .fillMaxWidth()
+                                        .height(IntrinsicSize.Min)
+                                        .padding(bottom = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "End",
-                                        color = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
-                                        fontSize = 24.sp,
-                                        fontWeight = FontWeight.Bold
+                                    Column {
+                                        val iconRes = when {
+                                            currentNavInstruction.contains(
+                                                "right",
+                                                ignoreCase = true
+                                            ) ->
+                                                R.drawable.right_turn_arrow
+
+                                            currentNavInstruction.contains(
+                                                "left",
+                                                ignoreCase = true
+                                            ) ->
+                                                R.drawable.left_turn_arrow
+
+                                            else ->
+                                                R.drawable.arrived_icon
+                                        }
+
+                                        Image(
+                                            painter = painterResource(id = iconRes),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(48.dp)
+                                        )
+
+                                        Text(
+                                            text = currentNavDistanceToTurn,
+                                            color = androidx.compose.ui.graphics.Color.White,
+                                            fontSize = 24.sp
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(20.dp))
+
+                                    Column(
+                                        modifier = Modifier
+                                            .width(175.dp)
+                                            .align(Alignment.CenterVertically)
+                                    ) {
+                                        Text(
+                                            text = currentNavInstruction,
+                                            color = androidx.compose.ui.graphics.Color.White,
+                                            fontSize = 32.sp,
+                                            style = TextStyle(
+                                                lineHeight = 32.sp // increase this for more spacing
+                                            )
+                                        )
+                                    }
+
+                                    Column(
+                                        horizontalAlignment = Alignment.End
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .padding(start = 18.dp)
+                                                .background(
+                                                    androidx.compose.ui.graphics.Color(
+                                                        0xffdd0d3c
+                                                    ),
+                                                    RoundedCornerShape(12.dp)
+                                                )
+                                                .clickable { cancelNavigation() }
+                                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "End",
+                                                color = androidx.compose.ui.graphics.Color(
+                                                    0xFFF5F5F5
+                                                ),
+                                                fontSize = 24.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                val tempCurrDirections = currentDirectionsWithDistances.drop(1)
+                                if (expanded && tempCurrDirections.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    HorizontalDivider(
+                                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.3f),
+                                        thickness = 1.dp,
+                                        modifier = Modifier.padding(vertical = 4.dp)
                                     )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f, fill = false)
+                                            .padding(bottom = 4.dp)
+                                    ) {
+                                        items(tempCurrDirections) { step ->
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                if (step.contains("Left", ignoreCase= true)) {
+                                                    Image(
+                                                        painter = painterResource(id = R.drawable.left_turn_arrow),
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(24.dp)
+                                                    )
+                                                } else if (step.contains("Right", ignoreCase= true)) {
+                                                    Image(
+                                                        painter = painterResource(id = R.drawable.right_turn_arrow),
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(24.dp)
+                                                    )
+                                                } else if (step.contains("U-Turn", ignoreCase= true)) {
+                                                    Image(
+                                                        painter = painterResource(id = R.drawable.left_turn_arrow),
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(24.dp)
+                                                    )
+                                                } else if (step.contains("Arrive", ignoreCase= true)) {
+                                                    Image(
+                                                        painter = painterResource(id = R.drawable.arrived_icon),
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(26.dp)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Text(
+                                                    text = step,
+                                                    color = androidx.compose.ui.graphics.Color.White,
+                                                    fontSize = 20.sp,
+                                                    modifier = Modifier.padding(vertical = 6.dp)
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2073,6 +2194,34 @@ private fun pathLength(path: List<Node>): Double {
         total += haversine(a.lat, a.lng, b.lat, b.lng)
     }
     return total
+}
+
+private fun generateFullRouteList(path: List<Node>, instructions: List<String>, segments: List<Int>, currentStepIndex: Int, distanceToTurn: Int): List<String> {
+    val results = mutableListOf<String>()
+
+    for (i in currentStepIndex until instructions.size) {
+        val instruction = instructions[i]
+        var distance = 0.0
+        if (i != currentStepIndex) {
+            val startIndex = maxOf(0, segments[i] - 1)
+
+            // Distance until next turn or destination
+            val endIndex = if (i < segments.size - 1) segments[i + 1] else path.size - 1
+
+            for (j in (startIndex + 1)..endIndex) {
+                val a = path[j - 1]
+                val b = path[j]
+                distance += haversine(a.lat, a.lng, b.lat, b.lng)
+            }
+        } else { distance = distanceToTurn.toDouble() }
+
+        val text = "In ${"%.0f".format(distance)}ft, $instruction"
+
+        results.add(text)
+    }
+    Log.d("NAV ROUTE RESULTS", "$results")
+
+    return results
 }
 
 private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityDetail>, mapNodes: MutableList<MapNode>, mapViewModel: MapViewModel) {

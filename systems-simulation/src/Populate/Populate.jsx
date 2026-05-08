@@ -6,7 +6,7 @@ import { db, functions } from "../firebase";
 import { useState } from "react";
 
 const GEO_COLLECTIONS = ["MapBackground", "MapNode", "PathEdge"];
-const MISC_COLLECTIONS = ["Terminal", "AmenityUnit", "AmenitySchedule", "Sensor", "User", "UserReports"];
+const MISC_COLLECTIONS = ["Terminal", "User", "UserReports"];
 
 async function wipeGeoCollections(addLog) {
     for (const name of GEO_COLLECTIONS) {
@@ -230,7 +230,6 @@ async function populateAmenityUnits(addLog) {
                     AmenityUnitID: unitId,
                     AmenityID: amenityId,
                     SensorType: "Occupancy",
-                    IsOccupied: false,
                     Status: "Idle",
                     LastUpdate: Date.now(),
                 });

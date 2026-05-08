@@ -180,6 +180,12 @@ fun MapScreen(
     var reroutedAmenity by remember { mutableStateOf<AmenityDetail?>(null) }
 
     val mapNodes = remember { mutableStateListOf<MapNode>() }
+    LaunchedEffect(mapNodes.size) {
+        if (mapNodes.isNotEmpty()) {
+            mapViewModel.storeMapNodes(mapNodes.toList())
+        }
+    }
+
     var showFilterDialog by remember { mutableStateOf(false) }
 
     // Custom Filter Checkbox states

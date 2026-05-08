@@ -150,6 +150,22 @@ exports.publishGraphToRealtime = onCall(async (request) => {
         const nodePool = [];
         const graph = {};
         const pathEdges = {};
+        const MERGE_THRESHOLD = 1e-5;
+
+        const getOrCreateNode = (lat, lng) => {
+            const existing = nodePool.find((n) => {
+                const dx = n.lng - lng;
+                const dy = n.lat - lat;
+                return dx * dx + dy * dy < MERGE_THRESHOLD * MERGE_THRESHOLD;
+            });
+            if (existing) return existing;
+            const newNode = { lat, lng };
+            nodePool.push(newNode);
+            return newNode;
+        };
+
+        const rtdbKey = (lng, lat) =>
+            `${lng},${lat}`.replace(/\./g, "_");
 
         snapshot.forEach((doc) => {
             const data = doc.data();
@@ -157,17 +173,21 @@ exports.publishGraphToRealtime = onCall(async (request) => {
             const edgeId = doc.id;
             const coords = data.coordinates || [];
 
+            // Store PathEdge for RTDB with congestion field
             pathEdges[edgeId] = {
                 id: edgeId,
                 name: data.name ?? null,
                 isOpen: data.isOpen ?? true,
                 congestion: 0,
-                coordinates: coords.map((p) => ({ lat: p.latitude, lng: p.longitude })),
+                coordinates: coords.map((p) => ({
+                    lat: p.latitude,
+                    lng: p.longitude,
+                })),
             };
 
             for (let i = 0; i < coords.length - 1; i++) {
-                const nodeA = getOrCreateNode(nodePool, coords[i].latitude, coords[i].longitude);
-                const nodeB = getOrCreateNode(nodePool, coords[i + 1].latitude, coords[i + 1].longitude);
+                const nodeA = getOrCreateNode(coords[i].latitude, coords[i].longitude);
+                const nodeB = getOrCreateNode(coords[i + 1].latitude, coords[i + 1].longitude);
                 const keyA = `${nodeA.lng},${nodeA.lat}`;
                 const keyB = `${nodeB.lng},${nodeB.lat}`;
 
@@ -178,14 +198,15 @@ exports.publishGraphToRealtime = onCall(async (request) => {
                 const rkB = rtdbKey(nodeB.lng, nodeB.lat);
 
                 if (!graph[keyA].neighbors[rkB]) {
-                    graph[keyA].neighbors[rkB] = { ...nodeB, congestion: 0, edge_id: edgeId };
+                    graph[keyA].neighbors[rkB] = { ...nodeB, congestion: 0, isOpen: data.isOpen ?? true, edge_id: edgeId };
                 }
                 if (!graph[keyB].neighbors[rkA]) {
-                    graph[keyB].neighbors[rkA] = { ...nodeA, congestion: 0, edge_id: edgeId };
+                    graph[keyB].neighbors[rkA] = { ...nodeA, congestion: 0, isOpen: data.isOpen ?? true, edge_id: edgeId };
                 }
             }
         });
 
+        // Build keyed graph payload for RTDB
         const rtdbPayload = {};
         Object.values(graph).forEach((entry) => {
             const nodeKey = rtdbKey(entry.node.lng, entry.node.lat);
@@ -195,6 +216,7 @@ exports.publishGraphToRealtime = onCall(async (request) => {
             };
         });
 
+        // Push graph and edges to Realtime Database
         await rtdb.ref("MapData/CurrentGraph").set({
             data: rtdbPayload,
             edges: pathEdges,

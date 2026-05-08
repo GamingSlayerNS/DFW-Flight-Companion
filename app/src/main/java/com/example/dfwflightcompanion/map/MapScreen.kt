@@ -2342,7 +2342,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
     Log.d("FirestoreDB", "MapScreen Initializing map node generation.")
     val functions = Firebase.functions
     // ONLY if testing locally:
-    functions.useEmulator("10.0.2.2", 5001)
+    //functions.useEmulator("10.0.2.2", 5001)
 
     // 1. Fetch MapBackgrounds
     functions.getHttpsCallable("getMapBackgrounds").call()

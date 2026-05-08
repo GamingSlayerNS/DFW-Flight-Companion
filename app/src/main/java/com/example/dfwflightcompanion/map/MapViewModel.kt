@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import com.example.dfwflightcompanion.helpers.Amenity
 import com.example.dfwflightcompanion.helpers.AmenityDetail
 import org.maplibre.android.geometry.LatLng
+import com.example.dfwflightcompanion.helpers.MapNode
 
 class MapViewModel : ViewModel() {
     var selectedAmenityId by mutableStateOf<String?>(null)
@@ -17,6 +18,13 @@ class MapViewModel : ViewModel() {
 
     var userLocation by mutableStateOf(LatLng(32.897546, -97.044471))
         private set
+
+    var mapNodes by mutableStateOf<List<MapNode>>(emptyList())
+        private set
+
+    fun storeMapNodes(nodes: List<MapNode>) {
+        mapNodes = nodes
+    }
 
     init {
         // Firestore realtime listener

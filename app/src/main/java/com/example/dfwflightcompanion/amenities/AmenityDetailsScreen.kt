@@ -74,7 +74,7 @@ fun AmenityDetailsScreen(
         errorMessage = null
         try {
             val functions = Firebase.functions
-            functions.useEmulator("10.0.2.2", 5001) // remove for production builds
+            //functions.useEmulator("10.0.2.2", 5001) // remove for production builds
 
             val data = hashMapOf("amenityId" to amenityId)
             functions.getHttpsCallable("getAmenityById").call(data)

@@ -43,7 +43,7 @@ fun AmenitiesScreen(
         try {
             val functions = Firebase.functions
             // ONLY if testing locally:
-            functions.useEmulator("10.0.2.2", 5001)
+            // functions.useEmulator("10.0.2.2", 5001)
 
             functions.getHttpsCallable("getAmenities")
                 .call()

@@ -4,7 +4,7 @@ module.exports = {
     node: true,
   },
   parserOptions: {
-    "ecmaVersion": 2018,
+    "ecmaVersion": 2022,
   },
   extends: [
     "eslint:recommended",
@@ -22,6 +22,7 @@ module.exports = {
     "object-curly-spacing": "off",
     "require-jsdoc": "off",
     "valid-jsdoc": "off",
+    "operator-linebreak": "off",
   },
   overrides: [
     {

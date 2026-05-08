@@ -1,5 +1,6 @@
 package com.example.dfwflightcompanion
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -9,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.dfwflightcompanion.amenities.AmenitiesScreen
 import com.example.dfwflightcompanion.amenities.AmenityDetailsScreen
+import com.example.dfwflightcompanion.amenities.UserReportScreen
 import com.example.dfwflightcompanion.map.MapScreen
 import com.example.dfwflightcompanion.map.MapViewModel
 import com.example.dfwflightcompanion.navigation.Destination
@@ -20,6 +22,9 @@ object Routes {
     const val AMENITY_DETAILS = "amenity_details/{amenityId}"
     fun amenityDetails(amenityId: String) = "amenity_details/$amenityId"
     const val DISABILITY_PROFILE_FORM = "disability_profile_form"
+    const val USER_REPORT_SCREEN = "user_report_screen/{amenityId}/{amenityName}"
+    fun userReport(amenityId: String?, amenityName: String?) =
+        "user_report_screen/${Uri.encode(amenityId ?: "")}/${Uri.encode(amenityName ?: "")}"
 }
 
 @Composable
@@ -68,6 +73,22 @@ fun AppNavHost(
             DisabilityProfileFormScreen(
                 navController = navController,
                 disabilityProfileViewModel = disabilityProfileViewModel
+            )
+        }
+        composable(
+            route = Routes.USER_REPORT_SCREEN,
+            arguments = listOf(
+                navArgument("amenityId") { type = NavType.StringType },
+                navArgument("amenityName") { type = NavType.StringType }
+            )
+        ){ backStackEntry ->
+            val amenityId = backStackEntry.arguments?.getString("amenityId") ?: return@composable
+            val amenityName = backStackEntry.arguments?.getString("amenityName") ?: return@composable
+
+            UserReportScreen(
+                navController = navController,
+                selectedAmenityId = amenityId,
+                selectedAmenityName = amenityName
             )
         }
     }

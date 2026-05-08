@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Accessible
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.example.dfwflightcompanion.Routes
 import com.example.dfwflightcompanion.helpers.AmenityDetail
 import com.example.dfwflightcompanion.map.MapViewModel
 import com.example.dfwflightcompanion.map.formatTimeAgo
@@ -136,6 +140,7 @@ fun AmenityDetailsScreen(
                 )
 
                 details != null -> AmenityDetailsContent(
+                    navController = navController,
                     details = details!!,
                     onUpdateCrowd = { showCrowdDialog = true },
                     onNavigate = {
@@ -168,6 +173,7 @@ fun AmenityDetailsScreen(
 
 @Composable
 private fun AmenityDetailsContent(
+    navController: NavHostController,
     details: AmenityDetail,
     onUpdateCrowd: () -> Unit,
     onNavigate: () -> Unit
@@ -260,6 +266,30 @@ private fun AmenityDetailsContent(
                 )
                 Spacer(Modifier.width(4.dp))
                 Text("Navigate")
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ){
+            Button(
+                onClick = {
+                    navController.navigate(Routes.userReport(
+                        amenityId = details.id,
+                        amenityName = details.name
+                    ))
+                },
+                //modifier = Modifier.height(32.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = androidx.compose.ui.graphics.Color(0xFFD32F2F),
+                    contentColor = androidx.compose.ui.graphics.Color.White
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Text("Submit an Issue")
             }
         }
     }

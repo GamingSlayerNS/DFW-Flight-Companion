@@ -1,5 +1,6 @@
 package com.example.dfwflightcompanion.navigation
 
+import android.util.Log
 import com.google.firebase.database.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,9 @@ object NavigationGraphRepository {
 
     private val _navigationGraph = MutableStateFlow<NavigationGraph?>(null)
     val navigationGraph: StateFlow<NavigationGraph?> = _navigationGraph
+
+    private val _edgeList= MutableStateFlow<String>("{}")
+    val edgeList: StateFlow<String> = _edgeList
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading
@@ -74,6 +78,33 @@ object NavigationGraphRepository {
                         data = graphEntries,
                         lastUpdated = lastUpdated
                     )
+
+                    val edgeSnapshot = snapshot.child("edges")
+                    Log.d("NavGraphRepo", "Edge snapshot exists: ${edgeSnapshot.exists()}, child count: ${edgeSnapshot.childrenCount}")
+                    val edgeEntries = mutableListOf<String>()
+                    for (edge in edgeSnapshot.children) {
+                        val name = edge.child("name").getValue(String::class.java) ?: ""
+                        val id = edge.child("id").getValue(String::class.java) ?: ""
+                        val type = "path"
+                        val level = 1
+                        val congestion =
+                            edge.child("congestion").getValue(Double::class.java) ?: 0.0
+                        val isOpen = edge.child("isOpen").getValue(Boolean::class.java) ?: false
+                        val coords = mutableListOf<String>()
+                        for (coordSnapshot in edge.child("coordinates").children) {
+                            val lat = coordSnapshot.child("lat").getValue(Double::class.java) ?: 0.0
+                            val lng = coordSnapshot.child("lng").getValue(Double::class.java) ?: 0.0
+                            coords.add("[${lng}, ${lat}, $level]")
+                        }
+                        val coordString = coords.joinToString(",")
+                        edgeEntries.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", 
+                            |"id": "$id", "level": "$level", "weight": $congestion, "isOpen": "$isOpen" }, 
+                            |"geometry": {"type": "LineString", "coordinates": [$coordString]}}""".trimMargin())
+                    }
+
+                    val edgeGeoJson = """{"type": "FeatureCollection", "features": [${edgeEntries.joinToString(",")}]}"""
+                    Log.d("NavGraphRepo", "edgeList built with ${edgeEntries.size} features: $edgeGeoJson")
+                    _edgeList.value = edgeGeoJson
                     _isLoading.value = false
                     _error.value = null
 
@@ -96,4 +127,6 @@ object NavigationGraphRepository {
         listener?.let { graphRef.removeEventListener(it) }
         listener = null
     }
+
+
 }

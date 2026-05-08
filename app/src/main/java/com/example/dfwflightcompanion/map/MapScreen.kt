@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,7 +61,6 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
@@ -117,6 +115,10 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.LineString
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
 fun formatTimeAgo(timestamp: Long): String {
@@ -147,6 +149,7 @@ fun MapScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var isNavigating by remember { mutableStateOf(false) }
     val mapRef = remember { mutableStateOf<MapLibreMap?>(null)}
+    val styleRef = remember { mutableStateOf<Style?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     // User's current location (Simulation)
@@ -221,6 +224,7 @@ fun MapScreen(
     }
 
     val navigationGraph by NavigationGraphRepository.navigationGraph.collectAsState()
+    val edgeList by NavigationGraphRepository.edgeList.collectAsState()
 
     LaunchedEffect(navigationGraph) {
         navigationGraph?.let {
@@ -246,7 +250,7 @@ fun MapScreen(
                 map.setStyle(Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")) { style ->
                     setupSourcesAndLayers(context, style, userLocation)
                     fetchDataFromFunctions(style, amenities, mapNodes, mapViewModel)
-                    
+                    styleRef.value = style
                     map.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
                             CameraPosition.Builder()
@@ -258,6 +262,18 @@ fun MapScreen(
                 }
             }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        combine(
+            snapshotFlow { styleRef.value }.filterNotNull(),
+            NavigationGraphRepository.edgeList
+        ) { style, json -> style to json }
+            .filter { (_, json) -> json.length > 2 }
+            .collectLatest { (style, json) ->
+                style.getSourceAs<GeoJsonSource>("routing-source")
+                    ?.setGeoJson(FeatureCollection.fromJson(json))
+            }
     }
 
     // Function to cancel navigation
@@ -2068,15 +2084,22 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     // 2. Routing Sources
     style.addSource(GeoJsonSource("routing-source"))
     style.addLayer(LineLayer("routing-layer", "routing-source").withProperties(
-        PropertyFactory.lineColor(Color.RED),
-        PropertyFactory.lineWidth(1f),
-        PropertyFactory.lineOpacity(0.6f)
+        PropertyFactory.lineColor(
+            step(
+                toNumber(get("weight")),
+                color(android.graphics.Color.parseColor("#4CAF50")),            // < 0.2: green
+                stop(0.2, color(android.graphics.Color.parseColor("#FFC107"))), // >= 0.2: amber
+                stop(0.5, color(android.graphics.Color.parseColor("#F44336")))  // >= 0.5: red
+            )
+        ),
+        PropertyFactory.lineWidth(2f),
+        PropertyFactory.lineOpacity(0.8f)
     ))
 
     // 3. Active Navigation Route Source
     style.addSource(GeoJsonSource("route-source"))
     style.addLayer(LineLayer("route-layer", "route-source").withProperties(
-        PropertyFactory.lineColor(color(Color.BLUE)),
+        PropertyFactory.lineColor(  color(Color.BLUE)),
         PropertyFactory.lineWidth(5f),
         PropertyFactory.lineCap("round"),
         PropertyFactory.lineJoin("round")
@@ -2380,7 +2403,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
             val geoJson = """{"type": "FeatureCollection", "features": [${featureList.joinToString(",")}]}"""
             style.getSourceAs<GeoJsonSource>("floorplan-source")?.setGeoJson(geoJson)
         }
-
+    /*
     // 2. Fetch PathEdges
     functions.getHttpsCallable("getPathEdges").call()
         .addOnSuccessListener { result ->
@@ -2401,6 +2424,7 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
             val geoJson = """{"type": "FeatureCollection", "features": [${pathList.joinToString(",")}]}"""
             style.getSourceAs<GeoJsonSource>("routing-source")?.setGeoJson(geoJson)
         }
+     */
 
     // 3. Fetch MapNodes
     functions.getHttpsCallable("getMapNodes").call()

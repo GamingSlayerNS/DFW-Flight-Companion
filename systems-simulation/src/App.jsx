@@ -9,6 +9,7 @@ import { db, rtdb } from "./firebase.js";
 import Populate from "./Populate/Populate.jsx";
 import Amenity from "./Amenity/Amenity.jsx";
 import AmenityUnit from "./AmenityUnits/AmenityUnit.jsx";
+import Reports from "./Reports/Reports.jsx";
 import Hallway from "./Hallway/Hallway.jsx";
 
 function App() {
@@ -69,7 +70,7 @@ function App() {
 
             <section id="next-steps" style={{ display: "flex", flexDirection: "column" }}>
                 <nav className="tab-bar">
-                    {["Amenity", "Stalls", "Hallway", "Populate"].map((tab) => (
+                    {["Amenity", "Stalls", "Reports", "Hallway", "Populate"].map((tab) => (
                         <button
                             key={tab}
                             className={`tab-button${activeTab === tab ? " tab-button--active" : ""}`}
@@ -83,9 +84,8 @@ function App() {
                 <div className="tab-content">
                     {activeTab === "Amenity" && <Amenity amenities={amenities} status={amenityStatus} />}
                     {activeTab === "Stalls" && <AmenityUnit amenities={amenities} status={amenityStatus} />}
-
                     {activeTab === "Hallway" && <Hallway nodes={nodes} status={nodeStatus} />}
-
+                    {activeTab === "Reports" && <Reports />}
                     {activeTab === "Populate" && <Populate />}
                 </div>
             </section>

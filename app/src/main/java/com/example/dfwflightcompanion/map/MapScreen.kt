@@ -1086,8 +1086,17 @@ fun MapScreen(
             val selectedBackground = remember(selectedDest, mapBackgrounds) {
                 findBackgroundForSelectedDest(selectedDest, mapBackgrounds)
             }
-            val selectedAmenityDist = selectedAmenity?.let { distanceToUser(it) }?.toInt()
+            var selectedAmenityDist = selectedAmenity?.let { distanceToUser(it) }?.toInt()
+            if (selectedAmenity != null && selectedAmenityDist == Int.MAX_VALUE) {
+                val selectedAmenityNode = mapNodes.find { it.id == selectedAmenity?.nodeId }
+                if (selectedAmenityNode != null)
+                    selectedAmenityDist = haversine(userLocation.latitude, userLocation.longitude, selectedAmenityNode.latitude, selectedAmenityNode.longitude).toInt()
+            }
             val selectedAmenityTime = (selectedAmenityDist?.div(40.0)?.toInt()?.coerceAtLeast(1)) ?: 1
+            val distanceText = when (selectedAmenityDist) {
+                Int.MAX_VALUE -> "Distance  •  Unknown  •  Unknown"
+                else -> "Distance  •  $selectedAmenityDist ft  •  $selectedAmenityTime min"
+            }
 
             Box(
                 modifier = Modifier
@@ -1270,7 +1279,7 @@ fun MapScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = "Distance  •  $selectedAmenityDist ft  •  $selectedAmenityTime min",
+                                text = distanceText,
                                 color = androidx.compose.ui.graphics.Color.Black,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -1656,7 +1665,7 @@ fun MapScreen(
 
         // Stop Navigation Button
         if (isNavigating) {
-            Button(
+            /* Button(
                 onClick = { cancelNavigation() },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = androidx.compose.ui.graphics.Color.Red,
@@ -1672,7 +1681,7 @@ fun MapScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("Stop Navigation", fontWeight = FontWeight.Bold)
                 }
-            }
+            } */
             if (currentNavInstruction.isNotEmpty() && !showAmenityBox) {
                 val screenHeight = LocalConfiguration.current.screenHeightDp.dp
                 Column(
@@ -2314,9 +2323,9 @@ private fun generateFullRouteList(path: List<Node>, instructions: List<String>, 
             // Distance until next turn or destination
             val endIndex = if (i < segments.size - 1) segments[i + 1] else path.size - 1
 
-            for (j in (startIndex + 1)..endIndex) {
-                val a = path[j - 1]
-                val b = path[j]
+            for (j in startIndex until endIndex) {
+                val a = path[j]
+                val b = path[j + 1]
                 distance += haversine(a.lat, a.lng, b.lat, b.lng)
             }
         } else { distance = distanceToTurn.toDouble() }
@@ -2325,7 +2334,6 @@ private fun generateFullRouteList(path: List<Node>, instructions: List<String>, 
 
         results.add(text)
     }
-    Log.d("NAV ROUTE RESULTS", "$results")
 
     return results
 }

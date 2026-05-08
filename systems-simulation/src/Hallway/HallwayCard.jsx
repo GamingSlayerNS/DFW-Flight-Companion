@@ -3,7 +3,11 @@ import { ref, update } from "firebase/database";
 import { rtdb } from "../firebase";
 import "./HallwayCard.css";
 
-const CONGESTION_LABELS = ["Low", "Medium", "High"];
+const getCongestionLabel = (value) => {
+    if (value < 0.2) return "Low";
+    if (value < 0.5) return "Medium";
+    return "High";
+};
 
 function HallwayCard({ nodeId, data }) {
     const { name, id, congestion, isOpen, coordinates } = data ?? {};
@@ -12,19 +16,31 @@ function HallwayCard({ nodeId, data }) {
     const [congestionIdx, setCongestionIdx] = useState(Number(congestion ?? 0));
     const [updating, setUpdating] = useState(false);
 
-    const committedLabel = CONGESTION_LABELS[Number(congestion)] ?? "Unknown";
+    const committedLabel = getCongestionLabel(Number(congestion ?? 0));
     const committedMod = committedLabel.toLowerCase();
     const committedStatus = isOpen ? "open" : "closed";
 
     const [start, end] = coordinates ?? [];
 
+    const toNodeKey = (lat, lng) =>
+        `${String(lng).replace(".", "_")},${String(lat).replace(".", "_")}`;
+
     const handleUpdate = async () => {
         setUpdating(true);
         try {
-            await update(ref(rtdb, `MapData/CurrentGraph/edges/${nodeId}`), {
-                isOpen: statusOpen,
-                congestion: congestionIdx,
-            });
+            const updates = {
+                [`MapData/CurrentGraph/edges/${nodeId}/isOpen`]: statusOpen,
+                [`MapData/CurrentGraph/edges/${nodeId}/congestion`]: congestionIdx,
+            };
+
+            if (start && end) {
+                const startKey = toNodeKey(start.lat, start.lng);
+                const endKey = toNodeKey(end.lat, end.lng);
+                updates[`MapData/CurrentGraph/data/${startKey}/neighbors/${endKey}/congestion`] = congestionIdx;
+                updates[`MapData/CurrentGraph/data/${endKey}/neighbors/${startKey}/congestion`] = congestionIdx;
+            }
+
+            await update(ref(rtdb, "/"), updates);
         } catch (e) {
             console.error("Failed to update edge:", e);
         } finally {

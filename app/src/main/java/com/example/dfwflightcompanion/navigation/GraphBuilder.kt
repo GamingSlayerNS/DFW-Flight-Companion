@@ -47,7 +47,7 @@ object GraphBuilder {
             val edges = entry.neighbors.values.map { neighbor ->
                 Edge(
                     target = Node(neighbor.lng, neighbor.lat),
-                    congestion = neighbor.congestion.toDouble()
+                    congestion = neighbor.congestion
                 )
             }
             graph[node] = edges

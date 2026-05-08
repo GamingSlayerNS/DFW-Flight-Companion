@@ -12,7 +12,8 @@ data class GraphNode(
 data class GraphNeighbor(
     val lat: Double = 0.0,
     val lng: Double = 0.0,
-    val congestion: Double = 0.0
+    val congestion: Double = 0.0,
+    val isOpen: Boolean = true
 )
 
 data class GraphEntry(
@@ -65,7 +66,8 @@ object NavigationGraphRepository {
                             val neighbor = GraphNeighbor(
                                 lat = neighborSnapshot.child("lat").getValue(Double::class.java) ?: 0.0,
                                 lng = neighborSnapshot.child("lng").getValue(Double::class.java) ?: 0.0,
-                                congestion = neighborSnapshot.child("congestion").getValue(Double::class.java) ?: 0.0
+                                congestion = neighborSnapshot.child("congestion").getValue(Double::class.java) ?: 0.0,
+                                isOpen = neighborSnapshot.child("isOpen").getValue(Boolean::class.java) ?: true
                             )
                             neighbors[neighborSnapshot.key ?: continue] = neighbor
                         }

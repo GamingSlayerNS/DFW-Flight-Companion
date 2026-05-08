@@ -37,7 +37,9 @@ function HallwayCard({ nodeId, data }) {
                 const startKey = toNodeKey(start.lat, start.lng);
                 const endKey = toNodeKey(end.lat, end.lng);
                 updates[`MapData/CurrentGraph/data/${startKey}/neighbors/${endKey}/congestion`] = congestionIdx;
+                updates[`MapData/CurrentGraph/data/${startKey}/neighbors/${endKey}/isOpen`] = statusOpen;
                 updates[`MapData/CurrentGraph/data/${endKey}/neighbors/${startKey}/congestion`] = congestionIdx;
+                updates[`MapData/CurrentGraph/data/${endKey}/neighbors/${startKey}/isOpen`] = statusOpen;
             }
 
             await update(ref(rtdb, "/"), updates);

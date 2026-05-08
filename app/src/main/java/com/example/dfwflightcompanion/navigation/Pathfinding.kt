@@ -6,7 +6,7 @@ import java.util.PriorityQueue
 // Data Model
 data class Node(val lng: Double, val lat: Double)
 
-data class Edge(val target: Node, val congestion: Double = 0.0)
+data class Edge(val target: Node, val congestion: Double = 0.0, val isOpen: Boolean = true)
 
 // Utility Functions
 object Pathfinding {
@@ -54,6 +54,7 @@ object Pathfinding {
             if (!visited.add(current)) continue
 
             for (edge in graph[current].orEmpty()) {
+                if (!edge.isOpen) continue
                 val neighbor = edge.target
                 if (neighbor in visited) continue
 

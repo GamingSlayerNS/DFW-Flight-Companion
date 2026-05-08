@@ -1,8 +1,11 @@
 package com.example.dfwflightcompanion.amenities
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material.icons.filled.Place
@@ -17,6 +20,11 @@ import com.example.dfwflightcompanion.map.MapViewModel
 import com.example.dfwflightcompanion.Routes
 import com.example.dfwflightcompanion.helpers.Amenity
 import com.example.dfwflightcompanion.navigation.Destination
+import com.example.dfwflightcompanion.helpers.haversine
+import kotlin.math.roundToInt
+
+enum class GenderFilter { NONE, MALE, FEMALE, NEUTRAL }
+enum class SortMode { ALPHABETICAL, DISTANCE }
 
 @Composable
 fun AmenitiesScreen(
@@ -27,6 +35,9 @@ fun AmenitiesScreen(
     val amenities = mapViewModel.amenities
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    var genderFilter by remember { mutableStateOf(GenderFilter.NONE) }
+    var sortMode by remember { mutableStateOf(SortMode.ALPHABETICAL) }
 
     /* LaunchedEffect(Unit) {
         try {
@@ -76,8 +87,61 @@ fun AmenitiesScreen(
         Text(
             text = "Terminal Amenities",
             style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 8.dp)
         )
+
+        Row(
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(bottom = 2.dp)
+        ) {
+            FilterChip(
+                selected = genderFilter == GenderFilter.MALE,
+                onClick = {
+                    genderFilter =
+                        if (genderFilter == GenderFilter.MALE) GenderFilter.NONE
+                        else GenderFilter.MALE
+                },
+                label = { Text("Male") }
+            )
+            FilterChip(
+                selected = genderFilter == GenderFilter.FEMALE,
+                onClick = {
+                    genderFilter =
+                        if (genderFilter == GenderFilter.FEMALE) GenderFilter.NONE
+                        else GenderFilter.FEMALE
+                },
+                label = { Text("Female") }
+            )
+            FilterChip(
+                selected = genderFilter == GenderFilter.NEUTRAL,
+                onClick = {
+                    genderFilter =
+                        if (genderFilter == GenderFilter.NEUTRAL) GenderFilter.NONE
+                        else GenderFilter.NEUTRAL
+                },
+                label = { Text("Neutral / Accessible") },
+                trailingIcon = {
+                    Icon(Icons.Default.Accessible, contentDescription = null)
+                }
+            )
+        }
+
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = sortMode == SortMode.ALPHABETICAL,
+                onClick = { sortMode = SortMode.ALPHABETICAL },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+            ) { Text("A–Z") }
+            SegmentedButton(
+                selected = sortMode == SortMode.DISTANCE,
+                onClick = { sortMode = SortMode.DISTANCE },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+            ) { Text("Distance") }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -92,11 +156,37 @@ fun AmenitiesScreen(
                 Text(text = "No amenities found.")
             }
         } else {
+            val mapNodes = mapViewModel.mapNodes
+            val userLoc = mapViewModel.userLocation
+
+            val visibleAmenities = remember(amenities, genderFilter, sortMode, mapNodes, userLoc) {
+                amenities
+                    .filter { a ->
+                        val genderOk = when (genderFilter) {
+                            GenderFilter.NONE    -> true
+                            GenderFilter.MALE    -> a.subType.equals("Male", true)
+                            GenderFilter.FEMALE  -> a.subType.equals("Female", true)
+                            GenderFilter.NEUTRAL -> a.subType.equals("Neutral", true)
+                        }
+                        genderOk
+                    }
+                    .let { list ->
+                        when (sortMode) {
+                            SortMode.ALPHABETICAL -> list.sortedBy { it.name.lowercase() }
+                            SortMode.DISTANCE -> list.sortedBy { a ->
+                                val node = mapNodes.firstOrNull { it.id == a.nodeId }
+                                if (node == null) Double.MAX_VALUE
+                                else haversine(userLoc.latitude, userLoc.longitude, node.latitude, node.longitude)
+                            }
+                        }
+                    }
+            }
+
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(amenities) { amenity ->
+                items(visibleAmenities) { amenity ->
                     AmenityCard(
                         amenity = amenity,
                         navController = navController,
@@ -123,6 +213,16 @@ fun AmenityCard(
             }*/,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
+        val node = mapViewModel.mapNodes.find { it.id == amenity.nodeId }
+        val distanceFt: Int? = node?.let {
+            val meters = haversine(
+                mapViewModel.userLocation.latitude,
+                mapViewModel.userLocation.longitude,
+                it.latitude,
+                it.longitude
+            )
+            (meters * 3.28084).roundToInt()
+        }
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -139,17 +239,36 @@ fun AmenityCard(
                         color = Color.Gray
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Place,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = Color.Gray
-                        )
-                        Text(
-                            text = " Node: ${amenity.nodeId}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Place,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color.Gray
+                                )
+                                Text(
+                                    text = " Node: ${amenity.nodeId}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            distanceFt?.let {
+                                Text(
+                                    text = "$it ft away",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
                     }
                 }
 

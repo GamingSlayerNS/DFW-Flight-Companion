@@ -1,16 +1,21 @@
 package com.example.dfwflightcompanion.profile
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -20,6 +25,12 @@ fun DisabilityProfileFormScreen(
 ) {
     val existing by disabilityProfileViewModel.profile.collectAsState()
     var form by remember(existing) { mutableStateOf(existing ?: DisabilityProfile()) }
+
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+    val canScrollDown by remember {
+        derivedStateOf { scrollState.value < scrollState.maxValue }
+    }
 
     Scaffold(
         topBar = {
@@ -31,14 +42,35 @@ fun DisabilityProfileFormScreen(
                     }
                 }
             )
-        }
+        },
+        floatingActionButton = {
+            AnimatedVisibility(
+                visible = canScrollDown,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                SmallFloatingActionButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            scrollState.animateScrollTo(scrollState.maxValue)
+                        }
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Scroll to bottom"
+                    )
+                }
+            }
+        },
+        floatingActionButtonPosition = FabPosition.Center
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SectionHeader("Mobility")

@@ -2084,11 +2084,14 @@ private fun setupSourcesAndLayers(context: Context, style: Style, userLoc: LatLn
     style.addSource(GeoJsonSource("routing-source"))
     style.addLayer(LineLayer("routing-layer", "routing-source").withProperties(
         PropertyFactory.lineColor(
-            step(
-                toNumber(get("weight")),
-                color(android.graphics.Color.parseColor("#4CAF50")),            // < 0.2: green
-                stop(0.2, color(android.graphics.Color.parseColor("#FFC107"))), // >= 0.2: amber
-                stop(0.5, color(android.graphics.Color.parseColor("#F44336")))  // >= 0.5: red
+            switchCase(
+                eq(get("isOpen"), literal("false")), color(android.graphics.Color.BLACK),
+                step(
+                    toNumber(get("weight")),
+                    color(android.graphics.Color.parseColor("#4CAF50")),            // < 0.2: green
+                    stop(0.2, color(android.graphics.Color.parseColor("#FFC107"))), // >= 0.2: amber
+                    stop(0.5, color(android.graphics.Color.parseColor("#F44336")))  // >= 0.5: red
+                )
             )
         ),
         PropertyFactory.lineWidth(2f),

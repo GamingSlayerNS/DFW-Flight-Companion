@@ -291,10 +291,10 @@ exports.publishGraphToRealtime = onCall(async (request) => {
                 const rkB = rtdbKey(nodeB.lng, nodeB.lat);
 
                 if (!graph[keyA].neighbors[rkB]) {
-                    graph[keyA].neighbors[rkB] = { ...nodeB, congestion: 0, edge_id: edgeId };
+                    graph[keyA].neighbors[rkB] = { ...nodeB, congestion: 0, isOpen: data.isOpen ?? true, edge_id: edgeId };
                 }
                 if (!graph[keyB].neighbors[rkA]) {
-                    graph[keyB].neighbors[rkA] = { ...nodeA, congestion: 0, edge_id: edgeId };
+                    graph[keyB].neighbors[rkA] = { ...nodeA, congestion: 0, isOpen: data.isOpen ?? true, edge_id: edgeId };
                 }
             }
         });

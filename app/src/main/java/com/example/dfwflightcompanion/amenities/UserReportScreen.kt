@@ -139,6 +139,7 @@ fun UserReportScreen(
                     val issue = selectedIssue ?: return@Button
                     isSubmitting = true
                     val report = hashMapOf(
+                        "UserID" to "U1",
                         "AmenityID" to selectedAmenityId,
                         "AmenityName" to selectedAmenityName,
                         "ReportType" to issue,

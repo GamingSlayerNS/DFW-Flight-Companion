@@ -824,6 +824,12 @@ fun MapScreen(
     LaunchedEffect(mapViewModel.selectedAmenityId, amenities.size, mapNodes.size) {
         selectionFromAmenityScreen = mapViewModel.selectedAmenityId
         if (selectionFromAmenityScreen == null) {
+            // If the box is open from a map tap, refresh the amenity data instead of closing
+            if (showAmenityBox && selectedAmenityId != null) {
+                selectedAmenity = amenities.firstOrNull { it.id == selectedAmenityId }
+                    ?: amenities.firstOrNull { it.nodeId == selectedAmenityId }
+                return@LaunchedEffect
+            }
             selectedAmenity = null
             showAmenityBox = false
             return@LaunchedEffect
@@ -2330,7 +2336,7 @@ private fun findClosestSegmentIndex(user: Node, path: List<Node>): Int {
         if (dist <= bestDist) {
             bestDist = dist
             bestIndex = i
-        }
+           }
     }
 
     return bestIndex

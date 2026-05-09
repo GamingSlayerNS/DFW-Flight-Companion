@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.AlertDialog
@@ -1223,8 +1224,26 @@ fun MapScreen(
                             fontFamily = FontFamily.SansSerif,
                             modifier = Modifier.padding(end = 20.dp)
                         )
-
                         Spacer(modifier = Modifier.height(10.dp))
+
+                        /*Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Accessible,
+                                contentDescription = null,
+                                tint = if (selectedAmenity?.subType == "neutral")
+                                    MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Gray
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                if (selectedAmenity?.subType == "neutral")
+                                    "Wheelchair Accessible"
+                                else
+                                    "Not Wheelchair Accessible"
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))*/
 
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1305,41 +1324,23 @@ fun MapScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+
+                        Button(
+                            onClick = {
+                                navController.navigate(Routes.userReport(
+                                    selectedAmenityId,
+                                    selectedAmenity?.name
+                                ))
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 21.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = androidx.compose.ui.graphics.Color(0xFFD32F2F),
+                                contentColor = androidx.compose.ui.graphics.Color.White
+                            )
                         ) {
-                            Button(
-                                onClick = {
-                                    showCrowdLvlBox = true
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 21.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = androidx.compose.ui.graphics.Color.DarkGray,
-                                    contentColor = androidx.compose.ui.graphics.Color.White
-                                )
-                            ) {
-                                Text("Update Crowd Level", fontSize = 12.sp)
-                            }
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Button(
-                                onClick = {
-                                    navController.navigate(Routes.userReport(
-                                        selectedAmenityId,
-                                        selectedAmenity?.name
-                                    ))
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 21.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = androidx.compose.ui.graphics.Color(0xFFD32F2F),
-                                    contentColor = androidx.compose.ui.graphics.Color.White
-                                )
-                            ) {
-                                Text("Submit an Issue", fontSize = 12.sp)
-                            }
+                            Text("Submit an Issue", fontSize = 12.sp)
                         }
                         Spacer(modifier = Modifier.height(0.dp))
                         Row(
@@ -2405,28 +2406,6 @@ private fun fetchDataFromFunctions(style: Style, amenities: MutableList<AmenityD
             val geoJson = """{"type": "FeatureCollection", "features": [${featureList.joinToString(",")}]}"""
             style.getSourceAs<GeoJsonSource>("floorplan-source")?.setGeoJson(geoJson)
         }
-    /*
-    // 2. Fetch PathEdges
-    functions.getHttpsCallable("getPathEdges").call()
-        .addOnSuccessListener { result ->
-            @Suppress("UNCHECKED_CAST")
-            val data = result.getData() as? List<Map<String, Any>> ?: return@addOnSuccessListener
-            val pathList = mutableListOf<String>()
-            data.forEach { doc ->
-                @Suppress("UNCHECKED_CAST")
-                val coords = doc["coordinates"] as? List<Map<String, Any>> ?: return@forEach
-                val type = doc["type"] as? String ?: ""
-                val name = doc["name"] as? String ?: ""
-                val id = doc["id"] as? String ?: ""
-                val level = (doc["level"] as? Number)?.toInt() ?: 0
-                val weight = (doc["weight"] as? Number)?.toFloat() ?: 0f
-                val coordString = coords.joinToString(",") { "[${it["longitude"]}, ${it["latitude"]}, $level]" }
-                pathList.add("""{"type": "Feature", "properties": {"type": "$type", "name": "$name", "id": "$id", "level": "$level", "weight": "$weight" }, "geometry": {"type": "LineString", "coordinates": [$coordString]}}""")
-            }
-            val geoJson = """{"type": "FeatureCollection", "features": [${pathList.joinToString(",")}]}"""
-            style.getSourceAs<GeoJsonSource>("routing-source")?.setGeoJson(geoJson)
-        }
-     */
 
     // 3. Fetch MapNodes
     functions.getHttpsCallable("getMapNodes").call()

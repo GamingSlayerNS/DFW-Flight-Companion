@@ -216,12 +216,12 @@ private fun AmenityDetailsContent(
                     Icon(
                         imageVector = Icons.Default.Accessible,
                         contentDescription = null,
-                        tint = if (details.isAccessible)
+                        tint = if (details.subType == "neutral")
                             MaterialTheme.colorScheme.primary else Color.Gray
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (details.isAccessible)
+                        if (details.subType == "neutral")
                             "Wheelchair Accessible"
                         else
                             "Not Wheelchair Accessible"
@@ -249,12 +249,6 @@ private fun AmenityDetailsContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(
-                onClick = onUpdateCrowd,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Update Crowd Level")
-            }
             Button(
                 onClick = onNavigate,
                 modifier = Modifier.weight(1f)
@@ -268,7 +262,6 @@ private fun AmenityDetailsContent(
                 Text("Navigate")
             }
         }
-
         Row(
             modifier = Modifier
                 .fillMaxWidth(),

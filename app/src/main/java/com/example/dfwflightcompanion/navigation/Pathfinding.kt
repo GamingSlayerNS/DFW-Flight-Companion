@@ -11,7 +11,7 @@ data class Edge(val target: Node, val congestion: Double = 0.0, val isOpen: Bool
 // Utility Functions
 object Pathfinding {
 
-    private const val CONGESTION_WEIGHT = 1.5 // Tune this to control how much congestion affects routing
+    private const val CONGESTION_WEIGHT = 1.0 // Tune this to control how much congestion affects routing
 
     fun distance(a: Node, b: Node): Double {
         val dx = a.lng - b.lng

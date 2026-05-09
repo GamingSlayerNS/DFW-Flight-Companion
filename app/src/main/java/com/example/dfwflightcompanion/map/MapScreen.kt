@@ -764,6 +764,14 @@ fun MapScreen(
         routeSource.setGeoJson(feature)
     }
 
+    LaunchedEffect(navigationGraph) {
+        if (isNavigating) {
+            currentDestination?.let { (destLng, destLat) ->
+                updateNavigation(destLng, destLat)
+            }
+        }
+    }
+
     // Updating the users location when the user is moved
     fun updateUserLocation(newLng: Double, newLat: Double) {
         val map = mapRef.value ?: return

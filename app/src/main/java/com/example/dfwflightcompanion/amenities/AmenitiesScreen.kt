@@ -24,7 +24,13 @@ import com.example.dfwflightcompanion.helpers.haversine
 import kotlin.math.roundToInt
 
 enum class GenderFilter { NONE, MALE, FEMALE, NEUTRAL }
-enum class SortMode { ALPHABETICAL, DISTANCE }
+enum class SortMode { ALPHABETICAL, DISTANCE, BEST }
+
+private const val WALKING_SPEED_M_PER_MIN = 84.0  // ~5 km/h average walking speed
+private const val CONGESTION_MULT = .75            // wait-time minutes per congestion tier
+// Low  (tier 0): +0.0 min  — wait under 2 min, negligible
+// Medium (tier 1): +3.5 min — wait under 5 min
+// High (tier 2): +7.0 min  — wait 5+ min
 
 @Composable
 fun AmenitiesScreen(
@@ -37,45 +43,7 @@ fun AmenitiesScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     var genderFilter by remember { mutableStateOf(GenderFilter.NONE) }
-    var sortMode by remember { mutableStateOf(SortMode.ALPHABETICAL) }
-
-    /* LaunchedEffect(Unit) {
-        try {
-            val functions = Firebase.functions
-            // ONLY if testing locally:
-            // functions.useEmulator("10.0.2.2", 5001)
-
-            functions.getHttpsCallable("getAmenities")
-                .call()
-                .addOnSuccessListener { result ->
-                    val data = result.getData() as? List<Map<String, Any>>
-                    if (data != null) {
-                        val fetchedAmenities = data.map { map ->
-                            Amenity(
-                                id = map["AmenityID"] as? String ?: "",
-                                name = map["Name"] as? String ?: "Unknown",
-                                type = map["AmenityType"] as? String ?: "",
-                                subType = map["SubTypeName"] as? String ?: "",
-                                isAccessible = map["IsAccessible"] as? Boolean ?: false,
-                                nodeId = map["NodeID"] as? String ?: ""
-                            )
-                        }
-                        amenities = fetchedAmenities
-                    }
-                    isLoading = false
-                }
-                .addOnFailureListener { exception ->
-                    Log.e("AmenitiesScreen", "Error calling getAmenities function", exception)
-                    errorMessage = "Failed to load amenities: ${exception.message}"
-                    isLoading = false
-                }
-        } catch (e: Exception) {
-            Log.e("AmenitiesScreen", "Failed to initialize functions", e)
-            errorMessage = "Initialization error: ${e.message}"
-            isLoading = false
-        }
-        amenities = mapViewModel.amenities
-    } */
+    var sortMode by remember { mutableStateOf(SortMode.BEST) }
 
     LaunchedEffect(amenities) {
         if (amenities.isNotEmpty()) {
@@ -133,13 +101,18 @@ fun AmenitiesScreen(
             SegmentedButton(
                 selected = sortMode == SortMode.ALPHABETICAL,
                 onClick = { sortMode = SortMode.ALPHABETICAL },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
             ) { Text("A–Z") }
             SegmentedButton(
                 selected = sortMode == SortMode.DISTANCE,
                 onClick = { sortMode = SortMode.DISTANCE },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
             ) { Text("Distance") }
+            SegmentedButton(
+                selected = sortMode == SortMode.BEST,
+                onClick = { sortMode = SortMode.BEST },
+                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
+            ) { Text("Best") }
         }
         Spacer(modifier = Modifier.height(10.dp))
 
@@ -177,6 +150,22 @@ fun AmenitiesScreen(
                                 val node = mapNodes.firstOrNull { it.id == a.nodeId }
                                 if (node == null) Double.MAX_VALUE
                                 else haversine(userLoc.latitude, userLoc.longitude, node.latitude, node.longitude)
+                            }
+                            SortMode.BEST -> list.sortedBy { a ->
+                                val node = mapNodes.firstOrNull { it.id == a.nodeId }
+                                if (node == null) Double.MAX_VALUE
+                                else {
+                                    val walkingMinutes = haversine(
+                                        userLoc.latitude, userLoc.longitude,
+                                        node.latitude, node.longitude
+                                    ) / WALKING_SPEED_M_PER_MIN
+                                    val congestionTier = when {
+                                        a.congestion.equals("Low", ignoreCase = true)    -> 0
+                                        a.congestion.equals("Medium", ignoreCase = true) -> 1
+                                        else                                              -> 2
+                                    }
+                                    walkingMinutes + congestionTier * CONGESTION_MULT
+                                }
                             }
                         }
                     }

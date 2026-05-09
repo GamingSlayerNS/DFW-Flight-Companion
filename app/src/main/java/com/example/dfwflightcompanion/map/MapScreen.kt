@@ -349,7 +349,6 @@ fun MapScreen(
             return
         }
 
-        // Replace navPath with the UI path
         navPath = newPath
         val (newDirections, newTurnSegments) = generateDirections(newPath)
         currentDirections = newDirections
@@ -743,6 +742,15 @@ fun MapScreen(
         // Calculate the route path
         val path = computeRoute(userLng, userLat, destLng, destLat) ?: return
 
+        // Keep navPath and turnSegments in sync with the latest computed path so
+        // moveUserToNextNode always targets nodes on the current route.
+        val (newDirections, newTurnSegments) = generateDirections(path)
+        navPath = path
+        currentDirections = newDirections
+        turnSegments = newTurnSegments
+        currentStepIndex = 0
+        lastSegmentIndex = -1
+
         if (isNavigating) {
             updateNavigationStep(destLng, destLat)
         }
@@ -953,28 +961,27 @@ fun MapScreen(
         updateUserLocation(newLng, newLat)
     }
 
-    fun moveUserToNextNode(){
+    fun moveUserToNextNode() {
         if (turnSegments.isEmpty() || currentStepIndex >= turnSegments.size) return
         val nextTurnSegment = turnSegments[currentStepIndex]
         val turnNode = navPath.getOrNull(nextTurnSegment) ?: return
 
         val startLat = userLocation.latitude
         val startLng = userLocation.longitude
-        val targetLat = turnNode.lat   // .toDouble() if it's a String
-        val targetLng = turnNode.lng  // .toDouble() if it's a String
+        val targetLat = turnNode.lat
+        val targetLng = turnNode.lng
 
         val deltaLat = targetLat - startLat
         val deltaLng = targetLng - startLng
 
-        // Constant speed: same per-frame step you had before
         val stepDeg = 0.000005
-        val frameMs = 16L  // ~60fps
+        val frameMs = 16L
         val distance = sqrt(deltaLat * deltaLat + deltaLng * deltaLng)
         val totalSteps = (distance / stepDeg).toInt().coerceAtLeast(1)
 
         coroutineScope.launch {
             for (i in 1..totalSteps) {
-                val t = i.toDouble() / totalSteps   // 0.0 -> 1.0
+                val t = i.toDouble() / totalSteps
                 val newLat = startLat + deltaLat * t
                 val newLng = startLng + deltaLng * t
 
@@ -1131,7 +1138,7 @@ fun MapScreen(
                     modifier = Modifier
                         .offset { IntOffset(0, offsetY.roundToInt()) }
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .height(340.dp)
                         .clip(
                             RoundedCornerShape(
                                 topStart = 32.dp,
@@ -1234,24 +1241,21 @@ fun MapScreen(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        /*Row(
+                        Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val isNeutral = selectedAmenity?.subType.equals("neutral", ignoreCase = true)
                             Icon(
                                 imageVector = Icons.Default.Accessible,
                                 contentDescription = null,
-                                tint = if (selectedAmenity?.subType == "neutral")
-                                    MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Gray
+                                tint = if (isNeutral) MaterialTheme.colorScheme.primary
+                                       else androidx.compose.ui.graphics.Color.Gray
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text(
-                                if (selectedAmenity?.subType == "neutral")
-                                    "Wheelchair Accessible"
-                                else
-                                    "Not Wheelchair Accessible"
-                            )
+                            Text(if (isNeutral) "Wheelchair Accessible" else "Not Wheelchair Accessible")
                         }
-                        Spacer(modifier = Modifier.height(10.dp))*/
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),

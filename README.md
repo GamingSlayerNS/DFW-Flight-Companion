@@ -5,7 +5,7 @@ A native Android application built as a capstone project that serves as a flight
 ## Tech Stack
 
 - **Android** (Kotlin + Jetpack Compose)
-- **Firebase** (Cloud Functions — Node.js/JavaScript)
+- **Firebase** (Cloud Functions — Node.js/JavaScript, Firestore, Auth, Hosting, Genkit)
 - **Gradle** (Kotlin DSL) for build management
 
 ## Prerequisites
@@ -17,7 +17,7 @@ A native Android application built as a capstone project that serves as a flight
   ```bash
   npm install -g firebase-tools
   ```
-- A Firebase project with Firestore and Cloud Functions enabled
+- A Firebase project with Firestore, Auth, Cloud Functions, and Hosting enabled
 - A `google-services.json` file placed at `app/google-services.json`
 
 ## Setup
@@ -48,23 +48,78 @@ npm install
 cd ..
 ```
 
-### 4. Open and build the Android app
+### 4. Install Systems Simulation dependencies
+
+```bash
+cd systems-simulation
+npm install
+cd ..
+```
+
+### 5. Open and build the Android app
 
 1. Open the project root in Android Studio.
 2. Let Gradle sync complete.
 3. Connect an Android device or start an emulator.
 4. Run the app via **Run ▶ Run 'app'**.
 
-## Running Cloud Functions locally (optional)
+## Running the App
+
+The project has three independently runnable components. For full local development, run all three.
+
+### Android App
+
+Open the project in Android Studio and press **Run ▶ Run 'app'**, or build from the command line:
 
 ```bash
-firebase emulators:start --only functions
+./gradlew assembleDebug
 ```
 
-## Deploying Cloud Functions
+The resulting APK will be at `app/build/outputs/apk/debug/app-debug.apk`.
+
+### Cloud Functions (local emulator)
+
+Run the Firebase emulator suite to serve functions locally without deploying:
+
+```bash
+firebase emulators:start --only functions,firestore,auth
+```
+
+The emulator UI is available at `http://localhost:4000` by default.
+
+To deploy functions to production:
 
 ```bash
 firebase deploy --only functions
+```
+
+### Systems Simulation
+
+The `systems-simulation` module is a web-based simulation served via Firebase Hosting. To run it locally:
+
+```bash
+cd systems-simulation
+npm start
+```
+
+Or serve it through the Firebase emulator alongside other services:
+
+```bash
+firebase emulators:start --only hosting
+```
+
+To deploy the simulation to Firebase Hosting:
+
+```bash
+firebase deploy --only hosting
+```
+
+## Running Everything Together
+
+To spin up all emulated services (functions, Firestore, Auth, and Hosting) in one command:
+
+```bash
+firebase emulators:start
 ```
 
 ## Project Structure
@@ -72,8 +127,8 @@ firebase deploy --only functions
 ```
 DFW-Flight-Companion/
 ├── app/                    # Android application source (Kotlin/Compose)
-├── functions/              # Firebase Cloud Functions (Node.js)
-├── systems-simulation/     # Simulation/modeling module
+├── functions/              # Firebase Cloud Functions (Node.js/Genkit)
+├── systems-simulation/     # Web-based simulation module (Firebase Hosting)
 ├── gradle/                 # Gradle wrapper files
 ├── build.gradle.kts        # Top-level Gradle build config
 ├── firebase.json           # Firebase project configuration
